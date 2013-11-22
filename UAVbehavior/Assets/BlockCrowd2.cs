@@ -5,6 +5,8 @@ using System;
 
 //this just allows us to pass one as a parameter, by reference to the actual values (classes are passed by reference... Vector3 structs are not...)
 //thus we can pass it once and update at once location and not have to copy to all other places utilizing it every time it updates
+
+//xyz vector memory reference (essentially a pointer)
 public class Vector3RefWrap
 {
 	public Vector3 val;
@@ -13,6 +15,7 @@ public class Vector3RefWrap
 		this.val = _initVal;
 	}
 }
+//float memory reference
 public class FloatRefWrap
 {
 	public float val;
@@ -22,9 +25,12 @@ public class FloatRefWrap
 	}
 }
 
+//Computer vision stub.
+//has a list of positions of sensed crowds
 public class CrowdDetectionSensor
 {
 	private BlockCrowd2 unityScriptAnchor;
+    //will take UAV entity (ie BlockCrowd2) by reference
 	public CrowdDetectionSensor(BlockCrowd2 _unityScriptAnchor)
 	{
 		this.unityScriptAnchor = _unityScriptAnchor;
@@ -37,16 +43,20 @@ public class CrowdDetectionSensor
 		simCrowds.Add (GameObject.Find ("/Blue"));
 		simCrowds.Add (GameObject.Find ("/Black"));
 
+        //list of egocentric vectors (pointing from UAV to Crowd objects)
 		List<Vector3> sensedCrowds = new List<Vector3> ();
 		foreach(GameObject crowd in simCrowds)
 		{
+            //distance from UAV to crowd GameObject position
 			float dist = (crowd.transform.position - unityScriptAnchor.transform.position).magnitude;
+            //if UAV can see the crowd
 			if ( dist < unityScriptAnchor.simDetectCrowdRange
 
 			    //otherwise how could we see them? assumes 180 degree field of view, though, and no rotation...
-			    //TODO: make it better by 
+			    //TODO: make it better by handling rotation and field of view
 			    && crowd.transform.position.z < unityScriptAnchor.transform.position.z)
 			{
+                //then add the egocentric vector pointing to the crowd to sensedCrowds
 				sensedCrowds.Add(crowd.transform.position - unityScriptAnchor.transform.position);
 			}
 		}
@@ -176,16 +186,20 @@ public class Hokuyo
 public class LocalizationPercept_Hokuyo
 {
 	private BlockCrowd2 unityScriptAnchor;
+    //raw data from Hokuyo sensor
 	private Vector3RefWrap uavLoc = new Vector3RefWrap(Vector3.zero);
 	private Vector3RefWrap hokuyoLoc = new Vector3RefWrap(Vector3.zero);
 	public Vector3RefWrap HokuyoLoc
 	{
 		get { return this.hokuyoLoc; }
 	}
+    
+    //relative to UAV
 	private FloatRefWrap leftWall = new FloatRefWrap(0);
 	private FloatRefWrap rightWall = new FloatRefWrap(0);
 	private FloatRefWrap ceiling = new FloatRefWrap(0);
 	private FloatRefWrap floor = new FloatRefWrap(0);
+
 	public FloatRefWrap LeftWall
 	{
 		get { return leftWall; }
@@ -261,6 +275,7 @@ public class PerpendicularExponentialIncrease : UAVMotorSchema
 
 	//give it a unit vector away from the 'wall'; max is the surface of the wall in x/y coordinate, it will have full strength at max, none at min.
 	//simple calc presumes the fieldOrient is axis-aligned, only one dimension for the field
+    //field orient--direction of field
 	public PerpendicularExponentialIncrease (Vector3 _fieldOrient, FloatRefWrap _max, FloatRefWrap _min, 
 	                                         float _peakFieldStrength, 
 	                                         BlockCrowd2 _unityScriptAnchor) : base (_unityScriptAnchor)
@@ -386,6 +401,8 @@ public class Rand2D : UAVMotorSchema
 {
 	private float changeTime = 0.0F;
 	private Vector3 currRandMove = Vector3.zero;
+    //position is a point directly down the z axis from crowd (that you're currently focused on) onto the plane in which
+    //the UAV exists.  Used to scale 
 	private Vector3RefWrap position;
 	private float capDistance;
 	
@@ -824,6 +841,7 @@ public class Avoid : UAVBehavior
 	}
 }
 
+//UAV entity and relevant information
 public class BlockCrowd2 : MonoBehaviour {
 	//for largely cosmetic reasons, there's no ceiling in the scene, so we stub it in here
 	private double hallwaySize = 7.5;
