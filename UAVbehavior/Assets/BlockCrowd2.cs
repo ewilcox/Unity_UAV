@@ -106,12 +106,6 @@ public class CrowdPercept
 	{
 		this.sensor = _sensor;
 		this.unityScriptAnchor = _unityScriptAnchor;
-
-		for(int i=0; i<10; i++)
-		{
-			blockableCrowds.Add(new Vector3RefWrap(Vector3.zero));
-			sensedCrowds.Add(new Vector3RefWrap(Vector3.zero));
-		}
 	}
 
 	public void Update()
@@ -126,15 +120,19 @@ public class CrowdPercept
 				sortCrowds.Add(Math.Abs (crowd.z), crowd);
 			}
 		}
-		if (blockableCrowdCount != sortCrowds.Count)
-			Debug.Log ("blockable: " + sortCrowds.Count);
+
+        //these lists are used as percepts; they get assigned once, passed to a motor schema perhaps; then they expect values to continue updating
+        //note that we overwrite crowd positions according to the order they appear in the sensor data, or the distance they are from the blocking plane
+        //there's no guarantee that the crowd a certain behavior responded to at one instant is the same one it will respond to in the next
+        //also, we must only grow the list, and overwrite, so we still refer to the same Vector3RefWrap which was passed to a motor schema or behavior
 		blockableCrowdCount = sortCrowds.Count;
+        while(blockableCrowdCount > this.blockableCrowds.Count)
+            blockableCrowds.Add(new Vector3RefWrap(Vector3.zero));
 		for(int i=0; i<this.blockableCrowds.Count; i++)
 		{
 			if ( i < sortCrowds.Count )
 			{
 				blockableCrowds[i].val = sortCrowds[sortCrowds.Keys[i]];
-						//Debug.DrawLine(unityScriptAnchor.transform.position, unityScriptAnchor.transform.position + blockableCrowds[i].val);
 			}	
 			else
 			{
@@ -143,9 +141,9 @@ public class CrowdPercept
 				blockableCrowds[i].val.z = float.MaxValue;
 			}
 		}
-		if (sensedCrowdCount != crowds.Count)
-			Debug.Log ("detected: " + crowds.Count);
-		sensedCrowdCount = crowds.Count;
+        sensedCrowdCount = crowds.Count;
+        while (sensedCrowdCount > this.sensedCrowds.Count)
+            sensedCrowds.Add(new Vector3RefWrap(Vector3.zero));
 		for(int i=0; i<this.sensedCrowds.Count; i++)
 		{
 			if ( i < crowds.Count )
@@ -240,16 +238,11 @@ public class LocalizationPercept_Hokuyo
 
 		//from this, we know the UAV's location relative to the sensor; for egocentric coords, we need the opposite
 		hokuyoLoc.val = Vector3.zero - uavLoc.val;
-		//and then we need to know where the walls are
+		//and then we need to know where the walls are:
 		this.rightWall.val = hokuyoLoc.val.x;
-			//Debug.DrawLine (new Vector3 (unityScriptAnchor.transform.position.x + this.rightWall.val, -10.0F, -5.5F), new Vector3 (unityScriptAnchor.transform.position.x + this.rightWall.val, 10.0F, -5.5F), Color.red);
-		//the problem may be to have a 12 foot wide/tall hallway, but to avoid constantly scaling simulation coords... it's 7.5 units wide/high
 		this.leftWall.val = rightWall.val + (float)unityScriptAnchor.HallwaySize;
-			//Debug.DrawLine (new Vector3 (unityScriptAnchor.transform.position.x + this.leftWall.val, -10.0F, -5.5F), new Vector3 (unityScriptAnchor.transform.position.x + this.leftWall.val, 10.0F, -5.5F));
 		this.ceiling.val = hokuyoLoc.val.y + (float)unityScriptAnchor.HallwaySize/2.0F;
-			//Debug.DrawLine (new Vector3 (-20.0F, unityScriptAnchor.transform.position.y + this.ceiling.val, -5.5F), new Vector3 (20.0F, unityScriptAnchor.transform.position.y + this.ceiling.val, -5.5F), Color.red);
 		this.floor.val = hokuyoLoc.val.y - (float)unityScriptAnchor.HallwaySize/2.0F;
-			//Debug.DrawLine (new Vector3 (-20.0F, unityScriptAnchor.transform.position.y + this.floor.val, -5.5F), new Vector3 (20.0F, unityScriptAnchor.transform.position.y + this.floor.val, -5.5F));
 	}
 }
 
@@ -259,6 +252,7 @@ public class LocalizationPercept_Hokuyo
 //--Motor Schemas: percept->motor schema->vector (response)
 public abstract class UAVMotorSchema
 {
+    //response of this motor schema; this will have a magnitude [0.0, 1.0], which gets scaled later
 	protected Vector3 responseTranslate;
 	public Vector3	ResponseTranslate
 	{
@@ -275,6 +269,7 @@ public abstract class UAVMotorSchema
 		unityScriptAnchor = _unityScriptAnchor;
 	}
 
+    //each motor schema must implement this, and inside must update responseTranslate and responseRotate according to their design
 	public abstract void Update();
 }
 
@@ -319,9 +314,6 @@ public class PerpendicularExponentialIncrease : UAVMotorSchema
 				(float)(peakFieldStrength * Math.Pow (100,0-x));
 			this.responseTranslate.x = this.fieldOrient.x * responseScale;
 			this.responseTranslate.y = this.fieldOrient.y * responseScale;
-			//if ( fieldOrient.y == -1 )
-			//Debug.Log(fieldOrient.x + "," + fieldOrient.y + "," + fieldOrient.z + ":"
-			        //+"["+minFieldCoord+","+maxFieldCoord+"](@"+posInScale+"); x="+x+",f(x)="+responseScale);
 		}
 	}
 }
@@ -442,7 +434,7 @@ public class Rand2D : UAVMotorSchema
 			UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
             this.currRandMove.x = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
             this.currRandMove.y = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
-			this.changeTime = Time.time + this.interval;//UnityEngine.Random.value;
+			this.changeTime = Time.time + this.interval;
 		}
 		this.responseTranslate = this.currRandMove * responseScale;
 	}
@@ -456,6 +448,7 @@ public class Rand2D : UAVMotorSchema
 //pass to motor schemas and what motor schemas or child behaviors to use to accomplish their behavior."
 public abstract class UAVBehavior
 {
+    //the behavior's response, which will be the sum of its child behaviors' and motor schemas' responses
 	protected Vector3 responseTranslate;
 	public Vector3	ResponseTranslate
 	{
@@ -484,8 +477,6 @@ public abstract class UAVBehavior
 		foreach (string behKey in childBehaviors.Keys) 
 		{
 			childBehaviors[behKey].Update();
-			if (childBehaviors[behKey].ResponseTranslate.magnitude > 1.0)
-				Debug.Log ("excess force: " + behKey + ": " + childBehaviors[behKey].ResponseTranslate.x + "," + childBehaviors[behKey].ResponseTranslate.y + "," + childBehaviors[behKey].ResponseTranslate.z);
 			this.responseTranslate = this.responseTranslate + childBehaviors[behKey].ResponseTranslate;
 			this.responseRotate = this.responseRotate + childBehaviors[behKey].ResponseRotate;
 		}
@@ -499,11 +490,17 @@ public abstract class UAVBehavior
 }
 
 //---Child Behaviors
+
+//KeepHeight: two opposing PerpendicularExponentialIncrease fields, with their minimums at the height in question,
+//and their maximums at the floor/ceiling perceptions
 public class KeepHeight : UAVBehavior
 {
 	//in terms of coordinates, this becomes relative to the UAV
 	//but, initially we do our constructor with a fixed value, which we preserve to know our offset from the floor percept
 	private float height;
+
+    //the distance we want from the floor doesn't change, but coordinates are egocentric; the position of that height in question DOES change, relative to the UAV.
+    //this is a transformation of the floor percept from the planar laser sensor to the y-axis position desired
 	private FloatRefWrap heightRelative = new FloatRefWrap(0);
 
 	public void KeepHeightField(Wall _wall)
@@ -544,9 +541,12 @@ public class KeepHeight : UAVBehavior
 }
 
 //hold a horizontal position, used for hallway centering while "watching"
+//uses AttractiveExponentialDecrease
 public class HoldCenter : UAVBehavior
 {
+    //the point in the center, which changes relative to the UAV, so we transform the left wall, floor, and hokuyo sensor locations to provide it to the motor schema
 	private Vector3RefWrap midPoint;
+
 	public HoldCenter(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
 	{
 		midPoint = new Vector3RefWrap( new Vector3 (
@@ -571,8 +571,12 @@ public class HoldCenter : UAVBehavior
 }
 
 //follow a crowd--only in x-dimension, still.  Conflicts with eye-level field, otherwise, since our percept is *center* of crowd (i.e. belly button...)
+//uses AttractiveExponentialDecrease
 public class Follow : UAVBehavior
 {
+    //for the magnitude of the attractive force, we want to be drawn to the crowd, or rather the position in the blocking plane directly in front of the crowd
+    //height doesn't matter to this behavior, just that we're in front, so we use 0.0, the existing coordinate of the UAV, in y
+    //z should be 0.0 too, but we use the hokuyo's location percept just in case of future changes
 	private Vector3RefWrap crowdProjectOnPlane;
 	
 	public Follow(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -598,10 +602,14 @@ public class Follow : UAVBehavior
 	}
 }
 
+//uses RepulsiveExponentialIncrease, keeps the UAV from colliding with the crowds, interrupting its service and possibly presenting a danger
 public class AvoidCrowd : UAVBehavior
 {
+    //doesn't attempt to move up or down, nor should the avoidance care whether we're close to their feet or head,
+    //so y-coordinate is 0.0, the UAV's current location.  Technically this means we also avoid the empty space above their head.
 	private Vector3RefWrap crowdUAVLevel;
-	private int nthCrowd;//avoid this crowd, in order of z-distance, so we can avoid running into any of them... perhaps closest 1 would usually do, but if they're side by side...
+	
+    private int nthCrowd;//avoid this crowd, in order of z-distance, so we can avoid running into any of them... perhaps closest 1 would usually do, but if they're side by side...
 	
 	public AvoidCrowd(BlockCrowd2 _unityScriptAnchor, int _nthCrowd ) : base(_unityScriptAnchor)
 	{
@@ -633,14 +641,18 @@ public class AvoidCrowd : UAVBehavior
 	}
 }
 
+//uses Rand2D to make unpredictable motions in front of a crowd, to scare them hopefully.
 public class ThreateningRand2D : UAVBehavior
 {
+    //if they're close enough to the blocking plane for threatening behaviors, that's great, but doing random 2D while across the hallway won't scare them,
+    //it'll just slow us down getting there.  So, the strength of this pfield is determined by the usual exponential function, relative to being close to the
+    //point on the blocking plane in front of the crowd
 	private Vector3RefWrap crowdProjectOnPlane;
 	public ThreateningRand2D(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
 	{
 		this.crowdProjectOnPlane = new Vector3RefWrap (new Vector3 (
 			_unityScriptAnchor.CrowdPercept.NthCrowd (0).val.x,
-			_unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)_unityScriptAnchor.ThreatenCentroidHeight,
+			_unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)_unityScriptAnchor.ThreatenHeight,
 			_unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z));
 		this.motorSchema.Add ("ms", new Rand2D (_unityScriptAnchor, this.crowdProjectOnPlane, 
 		                                        (float)_unityScriptAnchor.randThreaten2DDepth,
@@ -651,7 +663,7 @@ public class ThreateningRand2D : UAVBehavior
 	public override void Update ()
 	{
 		this.crowdProjectOnPlane.val.x = unityScriptAnchor.CrowdPercept.NthCrowd (0).val.x;
-		this.crowdProjectOnPlane.val.y = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.ThreatenCentroidHeight;
+		this.crowdProjectOnPlane.val.y = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.ThreatenHeight;
 		this.crowdProjectOnPlane.val.z = unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z;
 		base.Update ();
 	}
@@ -757,9 +769,13 @@ public enum Wall
 	Floor
 }
 //^^ used by vv //  Only tactical behavior.
+//avoids both wall and crowd collisions
 public class Avoid : UAVBehavior
 {
 	protected int currNumCrowdTracks = 0;
+
+    //wall avoid motor schema need one moving value not provided by a percept: the position, wallAvoidDepth from each surface, 
+    //at which the exponential of the pfield strength reaches 1% (the "min").  These maintain that input to the motor schema.
 	FloatRefWrap avoidFieldMin_Left = new FloatRefWrap(0);
 	FloatRefWrap avoidFieldMin_Right = new FloatRefWrap(0);
 	FloatRefWrap avoidFieldMin_Floor = new FloatRefWrap(0);
@@ -820,13 +836,11 @@ public class Avoid : UAVBehavior
 			newNumCrowdTracks++;
 			if ( newNumCrowdTracks > this.currNumCrowdTracks )
 			{
-				Debug.Log ("add crowd avoid: avoidcrowd"+newNumCrowdTracks);
 				childBehaviors.Add("avoidcrowd"+newNumCrowdTracks,new AvoidCrowd(this.unityScriptAnchor,newNumCrowdTracks-1));
 			}
 		}
 		while ( newNumCrowdTracks < this.currNumCrowdTracks )
 		{
-			Debug.Log ("remove crowd avoid: avoidcrowd"+this.currNumCrowdTracks);
 			childBehaviors.Remove("avoidcrowd"+this.currNumCrowdTracks);
 			this.currNumCrowdTracks--;
 		}
@@ -839,7 +853,7 @@ public class Avoid : UAVBehavior
 
 		base.Update ();
 
-        //-------debug draw lines----------
+        //-------here & below, draw response vector sum debug in scene view----------
 		Vector3 avoidDbgLineOffset = new Vector3(1,1,0);
 		Debug.DrawLine (this.unityScriptAnchor.transform.position + avoidDbgLineOffset, 
 		                this.unityScriptAnchor.transform.position + avoidDbgLineOffset
@@ -901,10 +915,10 @@ public class BlockCrowd2 : MonoBehaviour {
 	{
 		get { return aboveEyeLevel; }
 	}
-	private double threatenCentroidHeight;
-	public double ThreatenCentroidHeight
+	private double threatenHeight;
+	public double ThreatenHeight
 	{
-		get { return threatenCentroidHeight; }
+		get { return threatenHeight; }
 	}
 
 	public double simDetectCrowdRange = 5.0;
@@ -969,12 +983,13 @@ public class BlockCrowd2 : MonoBehaviour {
 		this.eyeLevel = GameObject.Find ("/Red").collider.bounds.size.y - 0.15F;
 		this.aboveEyeLevel = GameObject.Find ("/Red").collider.bounds.size.y + 1.0F;
 		this.crowdAvoidDeadZone = ((CapsuleCollider)GameObject.Find ("/Black").collider).radius;
-		this.threatenCentroidHeight = GameObject.Find ("/Red").collider.bounds.size.y - 0.5F;
+		this.threatenHeight = GameObject.Find ("/Red").collider.bounds.size.y - 0.5F;
         //--------------------------------------------
 
         //start with Avoid() because it's tactical
 		this.behaviors.Add ("avoid", new Avoid (this));
 
+        //this section makes the rotors spin realistically... it's cosmetic
 		spin = animation["Spin"];
 		spin.layer = 1;
 		spin.blendMode = AnimationBlendMode.Additive;
@@ -992,8 +1007,8 @@ public class BlockCrowd2 : MonoBehaviour {
 	
 	// Update is called once per frame
 	void Update () {
+        //this line makes the rotors spin realistically... it's cosmetic
 		animation.CrossFade("Spin");
-		//this is essentially the deliberative layer update.  Maybe have some fun by slowing it down, relative to reactive behaviors? Not much reason to justify in this app, though.
 
 		this.locPerceptHokuyo.Update ();
 		this.crowdPercept.Update ();
@@ -1047,15 +1062,10 @@ public class BlockCrowd2 : MonoBehaviour {
 		{
             //calls update function for every behavior
 			behaviors[behaviorKey].Update();
-			if (behaviors[behaviorKey].ResponseTranslate.magnitude > 1.0)
-				Debug.Log ("excess force: " + behaviorKey + ": " + behaviors[behaviorKey].ResponseTranslate.x + "," + behaviors[behaviorKey].ResponseTranslate.y + "," + behaviors[behaviorKey].ResponseTranslate.z);
 			//It's a much better sim if we actually use the physics... but then our pfields really need some damping, a PID controller or something...
 			this.overallResponse_Rotation = this.overallResponse_Rotation + behaviors[behaviorKey].ResponseRotate;
 			this.overallResponse_Translation = this.overallResponse_Translation + behaviors[behaviorKey].ResponseTranslate;
 		}
-		if (this.overallResponse_Translation.magnitude > 1.0)
-			Debug.Log ("excess force: (overall), check your forces (should be [0.0, 1.0]): " + overallResponse_Translation.x + "," + overallResponse_Translation.y + "," + overallResponse_Translation.z);
-		
         //draw white overall debug line
 		Vector3 overallDbgLineOffset = new Vector3 (1.01F,1.01F, 0);
 		Debug.DrawLine (this.transform.position + overallDbgLineOffset ,
@@ -1065,12 +1075,13 @@ public class BlockCrowd2 : MonoBehaviour {
 		                Color.white);
 
 		transform.Translate(this.overallResponse_Translation * (float)this.simModelForce * Time.deltaTime);
-		//TODO: make it so...
+        //using force, along with a physical model of the UAV in question, would make the simulation much more accurate... but harder to stabilize/dampen without a control theory background
+        //TODO: develop controller, use physics
 		//this.rigidbody.AddForce (this.overallResponse_Translation * (float)this.simModelForce);
-
 
 		//actually changes the transform.Translate results, so Translate is relative to object coordinate frame, not world (happens to be the same if euler angles are zero)
 		//force on the rigidbody, however, doesn't have this issue...
+        //TODO: re-enable once controller/physics are used; just cosmetic, though.
 		//float tiltMagnitude = (float)maxFauxTilt * (float)Math.Abs(this.rigidbody.velocity.x)/3.0F;
 		//tiltMagnitude = (float)Math.Min (maxFauxTilt, tiltMagnitude);
 		//transform.eulerAngles = new Vector3 (transform.eulerAngles.x, transform.eulerAngles.y, this.rigidbody.velocity.x<0?tiltMagnitude:0.0F-tiltMagnitude);
