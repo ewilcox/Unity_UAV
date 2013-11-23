@@ -25,6 +25,8 @@ public class FloatRefWrap
 	}
 }
 
+
+//--Sensor--
 //Computer vision stub.
 //has a list of positions of sensed crowds
 public class CrowdDetectionSensor
@@ -35,6 +37,8 @@ public class CrowdDetectionSensor
 	{
 		this.unityScriptAnchor = _unityScriptAnchor;
 	}
+
+    //called by CrowdPercept in it's update()
 	public List<Vector3> CrowdsDetected()
 	{
 		List<GameObject> simCrowds = new List<GameObject> ();
@@ -63,7 +67,7 @@ public class CrowdDetectionSensor
 		return sensedCrowds;
 	}
 }
-
+//--Percept--
 //simulated generic crowd detection percept
 public class CrowdPercept
 {
@@ -161,6 +165,10 @@ public class CrowdPercept
 	}
 }
 
+
+
+//--Sensor--
+//returns vector3 position of uav relative to Hokuyo.
 public class Hokuyo
 {
 	private BlockCrowd2 unityScriptAnchor;
@@ -170,6 +178,7 @@ public class Hokuyo
 	}
 	
 	//TODO: expand on this, from ground-truth to a simple simulation of the hokuyo planar laser ranger
+    //called by LocalizationPercept_Hokuyo
 	public Vector3 HokuyoSensorData()
 	{
 		//note that we are returning the UAV's location *relative to the hokuyo*; this is all we get from such a sensor at best
@@ -180,7 +189,7 @@ public class Hokuyo
 		return unityScriptAnchor.transform.position - hokuyoLocation;
 	}
 }
-
+//--Percept--
 //simulated Hokuyo sensor percept implementation
 //note that the hokayu is located 6 feet from the floor on the right wall, so it can tell where both walls and ceiling are relative the UAV
 public class LocalizationPercept_Hokuyo
@@ -244,6 +253,10 @@ public class LocalizationPercept_Hokuyo
 	}
 }
 
+
+
+
+//--Motor Schemas: percept->motor schema->vector (response)
 public abstract class UAVMotorSchema
 {
 	protected Vector3 responseTranslate;
@@ -265,6 +278,7 @@ public abstract class UAVMotorSchema
 	public abstract void Update();
 }
 
+//walls
 //perpendicular field, perhaps from wall, exponential, strongest at one coordinate, weakest (1%) at the "min" coordinate, absent elsewhere
 //currently only supports axis-aligned fields for orientation
 public class PerpendicularExponentialIncrease : UAVMotorSchema
@@ -311,7 +325,7 @@ public class PerpendicularExponentialIncrease : UAVMotorSchema
 		}
 	}
 }
-
+//crowd follow--(passed a projected point on plane)
 public class AttractiveExponentialDecrease : UAVMotorSchema
 {
 	private Vector3RefWrap position;
@@ -354,6 +368,7 @@ public class AttractiveExponentialDecrease : UAVMotorSchema
 	}
 }
 
+//crowd avoid (not a projection)
 public class RepulsiveExponentialIncrease : UAVMotorSchema
 {
 	private Vector3RefWrap position;
@@ -397,6 +412,7 @@ public class RepulsiveExponentialIncrease : UAVMotorSchema
 	}
 }
 
+//random 2d scaled down by exponential decrease from point...point passed is truncated/projected onto plane
 public class Rand2D : UAVMotorSchema
 {
 	private float changeTime = 0.0F;
@@ -404,12 +420,16 @@ public class Rand2D : UAVMotorSchema
     //position is a point directly down the z axis from crowd (that you're currently focused on) onto the plane in which
     //the UAV exists.  Used to scale 
 	private Vector3RefWrap position;
-	private float capDistance;
+    private float capDistance;
+    private float peakFieldStrength;
+    private float interval;
 	
-	public Rand2D(BlockCrowd2 _unityScriptAnchor, Vector3RefWrap _position, float _capDistance ) : base(_unityScriptAnchor)
+	public Rand2D(BlockCrowd2 _unityScriptAnchor, Vector3RefWrap _position, float _capDistance, float _interval, float _peakFieldStrength) : base(_unityScriptAnchor)
 	{
 		this.position = _position;
 		this.capDistance = _capDistance;
+        this.peakFieldStrength = _peakFieldStrength;
+        this.interval = _interval;
 	}
 	public override void Update()
 	{
@@ -420,14 +440,20 @@ public class Rand2D : UAVMotorSchema
 
 		if (Time.time > this.changeTime) {
 			UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
-			this.currRandMove.x = (float)this.unityScriptAnchor.randThreaten2DStrength * (2*UnityEngine.Random.value-1.0F);
-			this.currRandMove.y = (float)this.unityScriptAnchor.randThreaten2DStrength * (2*UnityEngine.Random.value-1.0F);
-			this.changeTime = Time.time + 0.2F;//UnityEngine.Random.value;
+            this.currRandMove.x = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
+            this.currRandMove.y = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
+			this.changeTime = Time.time + this.interval;//UnityEngine.Random.value;
 		}
 		this.responseTranslate = this.currRandMove * responseScale;
 	}
 }
 
+
+
+
+//---Behaviors: FINDS unityScriptAnchor.percept -> motor schema -> vector (response)
+//"Behaviors are different from motor schemas in that they know which percepts to get to 
+//pass to motor schemas and what motor schemas or child behaviors to use to accomplish their behavior."
 public abstract class UAVBehavior
 {
 	protected Vector3 responseTranslate;
@@ -472,6 +498,7 @@ public abstract class UAVBehavior
 	}
 }
 
+//---Child Behaviors
 public class KeepHeight : UAVBehavior
 {
 	//in terms of coordinates, this becomes relative to the UAV
@@ -554,7 +581,7 @@ public class Follow : UAVBehavior
 			_unityScriptAnchor.CrowdPercept.NthCrowd(0).val.x,
 			0.0F,
 			_unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z));
-
+        //TODO: transform the crowd projection to take eye-level height into account; then, enable Y-dimension field from this, and get rid of the KeepHeight in Follow-state.
 		this.motorSchema.Add ("ms", new AttractiveExponentialDecrease (_unityScriptAnchor, crowdProjectOnPlane, 
 		                                                     (float)_unityScriptAnchor.followStrength,
 		                                                     (float)_unityScriptAnchor.HallwaySize * 0.70F, 
@@ -615,7 +642,10 @@ public class ThreateningRand2D : UAVBehavior
 			_unityScriptAnchor.CrowdPercept.NthCrowd (0).val.x,
 			_unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)_unityScriptAnchor.ThreatenCentroidHeight,
 			_unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z));
-		this.motorSchema.Add ("ms", new Rand2D (_unityScriptAnchor, this.crowdProjectOnPlane, (float)_unityScriptAnchor.randThreaten2DDepth)
+		this.motorSchema.Add ("ms", new Rand2D (_unityScriptAnchor, this.crowdProjectOnPlane, 
+		                                        (float)_unityScriptAnchor.randThreaten2DDepth,
+		                                        (float)_unityScriptAnchor.randThreaten2DInterval,
+		                                        (float)_unityScriptAnchor.randThreaten2DStrength)
 				);
 	}
 	public override void Update ()
@@ -627,6 +657,9 @@ public class ThreateningRand2D : UAVBehavior
 	}
 }
 
+
+//---Parent Behaviors
+//released depending on distance of closest crowd.  Released == added to list of childBehaviors
 public class Watching : UAVBehavior
 {
 	public static Vector3 keepheightDbgLineOffset = new Vector3(1, 1, 0);
@@ -714,6 +747,8 @@ public class Threatening : UAVBehavior
 	}
 }
 
+
+
 public enum Wall
 {
 	Left,
@@ -721,7 +756,7 @@ public enum Wall
 	Ceiling,
 	Floor
 }
-
+//^^ used by vv //  Only tactical behavior.
 public class Avoid : UAVBehavior
 {
 	protected int currNumCrowdTracks = 0;
@@ -804,6 +839,7 @@ public class Avoid : UAVBehavior
 
 		base.Update ();
 
+        //-------debug draw lines----------
 		Vector3 avoidDbgLineOffset = new Vector3(1,1,0);
 		Debug.DrawLine (this.unityScriptAnchor.transform.position + avoidDbgLineOffset, 
 		                this.unityScriptAnchor.transform.position + avoidDbgLineOffset
@@ -841,9 +877,15 @@ public class Avoid : UAVBehavior
 	}
 }
 
+
+
+
+
+
 //UAV entity and relevant information
 public class BlockCrowd2 : MonoBehaviour {
 	//for largely cosmetic reasons, there's no ceiling in the scene, so we stub it in here
+    //these values are actually initialized in start()..these values are just to make the compiler happy
 	private double hallwaySize = 7.5;
 	public double HallwaySize
 	{
@@ -879,20 +921,26 @@ public class BlockCrowd2 : MonoBehaviour {
 	public double followStrength = 0.4;
 	public double randThreaten2DStrength = 0.04;
 	public double randThreaten2DDepth = 1.0;
+    public double randThreaten2DInterval = 0.2;
 
 	//desired movement in next dt/time interval/frame
 	private Vector3 overallResponse_Translation;
 	private Vector3 overallResponse_Rotation;
 
+    //make blades spin
 	private AnimationState spin;
 
 	//we will follow suit and just move... despite appearances, movement won't be a function of tilt + engine thrust + gravity...
-	public double maxFauxTilt = 45.0;
-	public double simModelForce = 100.0;
+	public double maxFauxTilt = 45.0; //max tilt appearance
 
+
+	public double simModelForce = 100.0; //multiplier for overallResponse_Translation...all field strengths are between 0 and 1--
+                                            //--meaning that each motor schema transform.translate has a max value of 1
+   
+    //already have description of these
 	private CrowdDetectionSensor crowdSensor;
 
-	private CrowdPercept crowdPercept;
+	private CrowdPercept crowdPercept; 
 	public CrowdPercept CrowdPercept {
 		get { return crowdPercept; }
 	}
@@ -903,7 +951,7 @@ public class BlockCrowd2 : MonoBehaviour {
 				get { return locPerceptHokuyo;}
 		}
 
-	private Dictionary<string,UAVBehavior> behaviors = new Dictionary<string, UAVBehavior>();
+	private Dictionary<string,UAVBehavior> behaviors = new Dictionary<string, UAVBehavior>(); //
 
 	public BlockCrowd2()
 	{
@@ -911,16 +959,20 @@ public class BlockCrowd2 : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
+        //these aren't changed after Start()--------
 		this.crowdSensor = new CrowdDetectionSensor (this);
 		crowdPercept = new CrowdPercept (this, this.crowdSensor);
 		this.hokuyo = new Hokuyo (this);
 		locPerceptHokuyo = new LocalizationPercept_Hokuyo (this, this.hokuyo);
+
 		this.hallwaySize = Math.Abs(GameObject.Find ("/Wall_Right").transform.position.x - GameObject.Find ("/Wall_Left").transform.position.x) - GameObject.Find ("/Wall_Left").collider.bounds.size.x;
 		this.eyeLevel = GameObject.Find ("/Red").collider.bounds.size.y - 0.15F;
 		this.aboveEyeLevel = GameObject.Find ("/Red").collider.bounds.size.y + 1.0F;
 		this.crowdAvoidDeadZone = ((CapsuleCollider)GameObject.Find ("/Black").collider).radius;
 		this.threatenCentroidHeight = GameObject.Find ("/Red").collider.bounds.size.y - 0.5F;
+        //--------------------------------------------
 
+        //start with Avoid() because it's tactical
 		this.behaviors.Add ("avoid", new Avoid (this));
 
 		spin = animation["Spin"];
@@ -930,6 +982,7 @@ public class BlockCrowd2 : MonoBehaviour {
 		spin.speed = 2.0F;
 
 		GameObject blockLine = GameObject.Find ("/BlockLine");
+        //start position at block line, above eye level.  (only time z is set/changed)
 		transform.position = new Vector3(blockLine.transform.position.x, 
 		                     //(this.blockLine.transform.position.y-transform.position.y)+(float)wallAvoidDepth, 
 		                     GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Red").collider.bounds.size.y + 1.0F,
@@ -939,21 +992,14 @@ public class BlockCrowd2 : MonoBehaviour {
 	
 	// Update is called once per frame
 	void Update () {
-		//we would have an imu, most likely, or some other means of maintaining the planar assumption of this system; without it, we'll just use
-		//a simple fix to keep the UAV in that plane.
-		//this.transform.Translate (0, 0, this.blockLine.transform.position.z - this.transform.position.z);
 		animation.CrossFade("Spin");
 		//this is essentially the deliberative layer update.  Maybe have some fun by slowing it down, relative to reactive behaviors? Not much reason to justify in this app, though.
-
-		//tactical behaviors;
-		//CrowdLocations(), assign Avoid to each
-		//make a static one for each wall, run Update() here
 
 		this.locPerceptHokuyo.Update ();
 		this.crowdPercept.Update ();
 
 		
-		//releasers; behaviors happen to be mutually exclusive (motor schema employed by them do not)
+		//releasers; behaviors happen to be mutually exclusive (motor schema employed by them are not)
 		bool approachZone = false;
 		bool threatenZone = false;
 		if ( crowdPercept.BlockableCrowdCount > 0 )
@@ -999,6 +1045,7 @@ public class BlockCrowd2 : MonoBehaviour {
 		this.overallResponse_Translation = Vector3.zero;
 		foreach (string behaviorKey in behaviors.Keys)
 		{
+            //calls update function for every behavior
 			behaviors[behaviorKey].Update();
 			if (behaviors[behaviorKey].ResponseTranslate.magnitude > 1.0)
 				Debug.Log ("excess force: " + behaviorKey + ": " + behaviors[behaviorKey].ResponseTranslate.x + "," + behaviors[behaviorKey].ResponseTranslate.y + "," + behaviors[behaviorKey].ResponseTranslate.z);
@@ -1009,6 +1056,7 @@ public class BlockCrowd2 : MonoBehaviour {
 		if (this.overallResponse_Translation.magnitude > 1.0)
 			Debug.Log ("excess force: (overall), check your forces (should be [0.0, 1.0]): " + overallResponse_Translation.x + "," + overallResponse_Translation.y + "," + overallResponse_Translation.z);
 		
+        //draw white overall debug line
 		Vector3 overallDbgLineOffset = new Vector3 (1.01F,1.01F, 0);
 		Debug.DrawLine (this.transform.position + overallDbgLineOffset ,
 		                this.transform.position  + overallDbgLineOffset
