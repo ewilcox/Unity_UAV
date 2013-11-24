@@ -43,10 +43,14 @@ public class CrowdDetectionSensor
 	public List<Vector3> CrowdsDetected()
 	{
 		List<GameObject> simCrowds = new List<GameObject> ();
-		simCrowds.Add (GameObject.Find ("/Red"));
-		simCrowds.Add (GameObject.Find ("/Yellow"));
-		simCrowds.Add (GameObject.Find ("/Blue"));
-		simCrowds.Add (GameObject.Find ("/Black"));
+		if (GameObject.Find ("/Red") != null)
+			simCrowds.Add (GameObject.Find ("/Red"));
+		if (GameObject.Find ("/Yellow") != null)
+			simCrowds.Add (GameObject.Find ("/Yellow"));
+		if (GameObject.Find ("/Blue") != null)
+			simCrowds.Add (GameObject.Find ("/Blue"));
+		if (GameObject.Find ("/Black") != null)
+			simCrowds.Add (GameObject.Find ("/Black"));
 
         //list of egocentric vectors (pointing from UAV to Crowd objects)
 		List<Vector3> sensedCrowds = new List<Vector3> ();
@@ -65,6 +69,8 @@ public class CrowdDetectionSensor
 				sensedCrowds.Add(crowd.transform.position - unityScriptAnchor.transform.position);
 			}
 		}
+		if (sensedCrowds.Count > 4 || sensedCrowds.Count < 0)
+			Debug.Log("***** vector count exceeds crowd elements by: " + sensedCrowds.Count);
 		return sensedCrowds;
 	}
 }
@@ -142,6 +148,8 @@ public class CrowdPercept
 				blockableCrowds[i].val.y = float.MaxValue;
 				blockableCrowds[i].val.z = float.MaxValue;
 			}
+			//This debug verified when they are out of range their values are reset to max values, as they move back into range they are reset.
+			//Debug.Log("x["+i+"]="+blockableCrowds[i].val.x + "y["+i+"]="+ blockableCrowds[i].val.y+"z["+i+"]="+blockableCrowds[i].val.z);
 		}
         sensedCrowdCount = crowds.Count;
         while (sensedCrowdCount > this.sensedCrowds.Count)
@@ -995,10 +1003,10 @@ public class BlockCrowd2 : MonoBehaviour {
 		locPerceptHokuyo = new LocalizationPercept_Hokuyo (this, this.hokuyo);
 
 		this.hallwaySize = Math.Abs(GameObject.Find ("/Wall_Right").transform.position.x - GameObject.Find ("/Wall_Left").transform.position.x) - GameObject.Find ("/Wall_Left").collider.bounds.size.x;
-		this.eyeLevel = GameObject.Find ("/Red").collider.bounds.size.y - 0.15F;
-		this.aboveEyeLevel = GameObject.Find ("/Red").collider.bounds.size.y + 1.0F;
+		this.eyeLevel = GameObject.Find ("/Black").collider.bounds.size.y - 0.15F;
+		this.aboveEyeLevel = GameObject.Find ("/Black").collider.bounds.size.y + 1.0F;
 		this.crowdAvoidDeadZone = ((CapsuleCollider)GameObject.Find ("/Black").collider).radius;
-		this.threatenHeight = GameObject.Find ("/Red").collider.bounds.size.y - 0.5F;
+		this.threatenHeight = GameObject.Find ("/Black").collider.bounds.size.y - 0.5F;
         //--------------------------------------------
 
         //start with Avoid() because it's tactical
