@@ -39,6 +39,7 @@ public class CrowdDetectionSensor
 	}
 
     //called by CrowdPercept in it's update()
+    //returns list of egocentric vectors (pointing from UAV to Crowd objects)
 	public List<Vector3> CrowdsDetected()
 	{
 		List<GameObject> simCrowds = new List<GameObject> ();
@@ -68,6 +69,7 @@ public class CrowdDetectionSensor
 	}
 }
 //--Percept--
+//--returns blockableCrowds (ordered list of crowds) and/or sensedCrowds (unordered)
 //simulated generic crowd detection percept
 public class CrowdPercept
 {
@@ -489,6 +491,7 @@ public abstract class UAVBehavior
 	}
 }
 
+
 //---Child Behaviors
 
 //KeepHeight: two opposing PerpendicularExponentialIncrease fields, with their minimums at the height in question,
@@ -670,8 +673,11 @@ public class ThreateningRand2D : UAVBehavior
 }
 
 
+
 //---Parent Behaviors
 //released depending on distance of closest crowd.  Released == added to list of childBehaviors
+
+//Uses: KeepHeight and HoldCenter
 public class Watching : UAVBehavior
 {
 	public static Vector3 keepheightDbgLineOffset = new Vector3(1, 1, 0);
@@ -699,7 +705,7 @@ public class Watching : UAVBehavior
 		                Color.green);
 	}
 }
-
+//Uses: KeepHeight and Follow
 public class Approaching : UAVBehavior
 {
 	public Approaching(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -725,7 +731,7 @@ public class Approaching : UAVBehavior
 		                Color.green);
 	}
 }
-
+//Uses: KeepHeight, Follow and ThreateningRand2D
 public class Threatening : UAVBehavior
 {
 	public Threatening(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -770,6 +776,7 @@ public enum Wall
 }
 //^^ used by vv //  Only tactical behavior.
 //avoids both wall and crowd collisions
+//Uses: AvoidCrowd and MS: PerpendicularExponentialIncrease
 public class Avoid : UAVBehavior
 {
 	protected int currNumCrowdTracks = 0;
