@@ -496,6 +496,8 @@ public abstract class UAVBehavior
 
 //KeepHeight: two opposing PerpendicularExponentialIncrease fields, with their minimums at the height in question,
 //and their maximums at the floor/ceiling perceptions
+//Percepts:  LocPerceptHokuyo
+//Motor Schemas: PerpendicularExponentialIncrease
 public class KeepHeight : UAVBehavior
 {
 	//in terms of coordinates, this becomes relative to the UAV
@@ -544,7 +546,8 @@ public class KeepHeight : UAVBehavior
 }
 
 //hold a horizontal position, used for hallway centering while "watching"
-//uses AttractiveExponentialDecrease
+//Percepts:  LocPerceptHokuyo
+//Motor Schemas: AttractiveExponentialDecrease
 public class HoldCenter : UAVBehavior
 {
     //the point in the center, which changes relative to the UAV, so we transform the left wall, floor, and hokuyo sensor locations to provide it to the motor schema
@@ -574,7 +577,8 @@ public class HoldCenter : UAVBehavior
 }
 
 //follow a crowd--only in x-dimension, still.  Conflicts with eye-level field, otherwise, since our percept is *center* of crowd (i.e. belly button...)
-//uses AttractiveExponentialDecrease
+//Percepts: LocPerceptHokuyo, CrowdPercept
+//Motor Schemas: AttractiveExponentialDecrease
 public class Follow : UAVBehavior
 {
     //for the magnitude of the attractive force, we want to be drawn to the crowd, or rather the position in the blocking plane directly in front of the crowd
@@ -605,7 +609,9 @@ public class Follow : UAVBehavior
 	}
 }
 
-//uses RepulsiveExponentialIncrease, keeps the UAV from colliding with the crowds, interrupting its service and possibly presenting a danger
+//keeps the UAV from colliding with the crowds, interrupting its service and possibly presenting a danger
+//Percepts: CrowdPercept
+//Motor Schemas: RepulsiveExponentialIncrease
 public class AvoidCrowd : UAVBehavior
 {
     //doesn't attempt to move up or down, nor should the avoidance care whether we're close to their feet or head,
@@ -645,6 +651,8 @@ public class AvoidCrowd : UAVBehavior
 }
 
 //uses Rand2D to make unpredictable motions in front of a crowd, to scare them hopefully.
+//Percepts: LocPerceptHokuyo, CrowdPercept
+//Motor Schemas: Rand2D
 public class ThreateningRand2D : UAVBehavior
 {
     //if they're close enough to the blocking plane for threatening behaviors, that's great, but doing random 2D while across the hallway won't scare them,
