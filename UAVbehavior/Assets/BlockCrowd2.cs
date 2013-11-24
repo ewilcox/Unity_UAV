@@ -1023,7 +1023,7 @@ public class BlockCrowd2 : MonoBehaviour {
         //start position at block line, above eye level.  (only time z is set/changed)
 		transform.position = new Vector3(blockLine.transform.position.x, 
 		                     //(this.blockLine.transform.position.y-transform.position.y)+(float)wallAvoidDepth, 
-		                     GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Red").collider.bounds.size.y + 1.0F,
+		                     GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Black").collider.bounds.size.y + 1.0F,
 		                     blockLine.transform.position.z);
 		Debug.Log ("Avoid:red; Height:blue; Followish:green; rand2d:yellow; overall:white");
 	}
