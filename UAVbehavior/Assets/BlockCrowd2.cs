@@ -964,6 +964,8 @@ public class Avoid : UAVBehavior
 		this.motorSchema.Add (msKey, 
 		                      new PerpendicularExponentialIncrease (fieldOrient, fieldMax, fieldMin, 
 		                                      (float)unityScriptAnchor.wallAvoidStrength, unityScriptAnchor));
+		if (msKey == "?")
+			Debug.Log ("***** Avoid behavior msKey not set!");
 	}
 
 	public Avoid(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -1131,6 +1133,7 @@ public class BlockCrowd2 : MonoBehaviour {
 		this.hokuyo = new Hokuyo (this);
 		locPerceptHokuyo = new LocalizationPercept_Hokuyo (this, this.hokuyo);
 
+		//may want to change the find"black" gameobject to another percept for setting initial positions, suggest something from Hokuyo sensor possibly
 		this.hallwaySize = Math.Abs(GameObject.Find ("/Wall_Right").transform.position.x - GameObject.Find ("/Wall_Left").transform.position.x) - GameObject.Find ("/Wall_Left").collider.bounds.size.x;
 		this.eyeLevel = GameObject.Find ("/Black").collider.bounds.size.y - 0.15F;
 		this.aboveEyeLevel = GameObject.Find ("/Black").collider.bounds.size.y + 1.0F;
@@ -1154,7 +1157,7 @@ public class BlockCrowd2 : MonoBehaviour {
 		                     //(this.blockLine.transform.position.y-transform.position.y)+(float)wallAvoidDepth, 
 		                     GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Black").collider.bounds.size.y + 1.0F,
 		                     blockLine.transform.position.z);
-		Debug.Log ("Avoid:red; Height:blue; Followish:green; rand2d:yellow; overall:white");
+		Debug.Log ("Vectors shown in scene - Avoid:red; Height:blue; Followish:green; rand2d:yellow; overall:white");
 	}
 	
 	// Update is called once per frame
