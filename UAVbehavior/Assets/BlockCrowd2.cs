@@ -438,12 +438,13 @@ public class Rand2D : UAVMotorSchema
 		//note infinite field range, exponential force proprotional to distance from desired position
 		//decay reaches 1% at capDistance, but strictly never reaches zero (always applies something)
 		float x = position.val.magnitude / capDistance;
-		float responseScale = (float)Math.Pow (100, 0.0F-x);
+		float responseScale = (float)Math.Pow (100, 0.0F-x) * (float)this.peakFieldStrength;
 
 		if (Time.time > this.changeTime) {
 			UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
-            this.currRandMove.x = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
-            this.currRandMove.y = (float)this.peakFieldStrength * (2 * UnityEngine.Random.value - 1.0F);
+            this.currRandMove.x = (2 * UnityEngine.Random.value - 1.0F);
+			this.currRandMove.y = (2 * UnityEngine.Random.value - 1.0F);
+			this.currRandMove = this.currRandMove / this.currRandMove.magnitude;
 			this.changeTime = Time.time + this.interval;
 		}
 		this.responseTranslate = this.currRandMove * responseScale;
@@ -639,7 +640,7 @@ public class AvoidCrowd : UAVBehavior
 		                                                     (float)_unityScriptAnchor.crowdAvoidStrength, 
 		                                                     (float)_unityScriptAnchor.crowdAvoidDepth, 
 		                                                     true, false, false,
-		                                                     (float)_unityScriptAnchor.crowdAvoidDeadZone)
+		                                                     (float)_unityScriptAnchor.CrowdAvoidDeadZone)
 				);
 		
 		//I was going to put detected crowds as omnidirectional... but after discussion in lecture today, 
@@ -951,12 +952,16 @@ public class BlockCrowd2 : MonoBehaviour {
 	public double wallAvoidStrength = 0.5;
 	public double wallAvoidDepth = 1.0;
 	public double crowdAvoidStrength = 1.0;
-	public double crowdAvoidDeadZone = 0.0; //start repulsive field at crowd surface, not center
-	public double crowdAvoidDepth = 0.2;
+	private double crowdAvoidDeadZone = 0.0; //start repulsive field at crowd surface, not center
+	public double CrowdAvoidDeadZone
+	{
+		get { return this.crowdAvoidDeadZone; }
+	}
+	public double crowdAvoidDepth = 0.4;
 	public double keepHeightStrength = 0.4;
 	public double holdPositionStrength = 0.25;
 	public double followStrength = 0.4;
-	public double randThreaten2DStrength = 0.04;
+	public double randThreaten2DStrength = 0.1;
 	public double randThreaten2DDepth = 1.0;
     public double randThreaten2DInterval = 0.2;
 
@@ -968,7 +973,7 @@ public class BlockCrowd2 : MonoBehaviour {
 	private AnimationState spin;
 
 	//we will follow suit and just move... despite appearances, movement won't be a function of tilt + engine thrust + gravity...
-	public double maxFauxTilt = 45.0; //max tilt appearance
+	private double maxFauxTilt = 45.0; //max tilt appearance
 
 
 	public double simModelForce = 100.0; //multiplier for overallResponse_Translation...all field strengths are between 0 and 1--
