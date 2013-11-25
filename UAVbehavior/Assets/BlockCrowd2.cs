@@ -432,7 +432,11 @@ public class PerpendicularExponentialIncrease : UAVMotorSchema
 				(float)(peakFieldStrength * Math.Pow (100,0-x));
 			this.responseTranslate.x = this.fieldOrient.x * responseScale;
 			this.responseTranslate.y = this.fieldOrient.y * responseScale;
+			if (responseScale > 1 || responseScale < 0)
+				Debug.Log ("*****response scale (should be 0 to 1) = " + responseScale);
 		}
+		//Min and max field coordinates checked here, as well as response scale
+		//Debug.Log ("minFieldCoord.val=" + minFieldCoord.val + " maxFieldCoord.val=" + maxFieldCoord.val);
 	}
 }
 //crowd follow--(passed a projected point on plane)
@@ -456,7 +460,9 @@ public class AttractiveExponentialDecrease : UAVMotorSchema
 	public override void Update()
 	{
 		this.responseRotate = Vector3.zero;
-
+		//while preventing this is better, I don't believe it ever happens & this should verify that
+		if (capDistance == 0)
+			Debug.Log("*****WARNING: capdistance is 0, division by 0!");
 		this.responseTranslate = Vector3.zero;
 		Vector3 fieldVecOrient = position.val; //away from UAV, toward position
 		//note infinite field range, exponential force proprotional to distance from desired position
@@ -547,7 +553,8 @@ public class Rand2D : UAVMotorSchema
 		//decay reaches 1% at capDistance, but strictly never reaches zero (always applies something)
 		float x = position.val.magnitude / capDistance;
 		float responseScale = (float)Math.Pow (100, 0.0F-x) * (float)this.peakFieldStrength;
-
+		if (responseScale <= 0)
+			Debug.Log ("***** Rand2D responseScale == 0!");
 		if (Time.time > this.changeTime) {
 			UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
             this.currRandMove.x = (2 * UnityEngine.Random.value - 1.0F);
@@ -645,6 +652,8 @@ public class KeepHeight : UAVBehavior
 		this.motorSchema.Add (msKey, new PerpendicularExponentialIncrease (fieldOrient, fieldMax, heightRelative, 
 		                                                                   (float)unityScriptAnchor.keepHeightStrength, 
 		                                                                   unityScriptAnchor));
+		if (msKey == "?")
+			Debug.Log ("*****KeepHeight.msKey=? - it should be floor or ceiling");
 	}
 	
 	public KeepHeight(BlockCrowd2 _unityScriptAnchor, float _height) : base(_unityScriptAnchor)
@@ -689,6 +698,13 @@ public class HoldCenter : UAVBehavior
 		midPoint.val.y = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.AboveEyeLevel;
 		midPoint.val.z = unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z;
 
+		//This debug should really be based on maximum sensor ranges ( distance > max ), but used null here for Unity environment
+		if (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val == null ||
+						unityScriptAnchor.LocPerceptHokuyo.Floor.val == null ||
+						unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z == null)
+			Debug.Log ("*****Error, leftwall, floor or Hokuyo.z not detected");
+		//Enable following line to see what readings your recieving when trying to center to hall.
+		//Debug.Log (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val + " : " + unityScriptAnchor.LocPerceptHokuyo.Floor.val + " : " + unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z);
 		base.Update ();
 	}
 }
@@ -1058,7 +1074,7 @@ public class BlockCrowd2 : MonoBehaviour {
 	public double threatenRange = 3.0;
 
 	public double wallAvoidStrength = 0.5;
-	public double wallAvoidDepth = 1.0;
+	public double wallAvoidDepth = 0.4;
 	public double crowdAvoidStrength = 1.0;
 	private double crowdAvoidDeadZone = 0.0; //start repulsive field at crowd surface, not center
 	public double CrowdAvoidDeadZone
