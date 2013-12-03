@@ -3,6 +3,90 @@ using System.Collections;
 using System.Collections.Generic;
 using System;
 
+#if DEBUG
+
+namespace UnityEngine
+{
+    public class Debug
+    {
+        public static void Log(string s) { Console.WriteLine(s); }
+        public static void LogWarning(string s) { Console.WriteLine(s); }
+        public static void LogError(string s) { Console.WriteLine(s); }
+        public static void DrawLine(Vector3 start, Vector3 end, Color color) { }
+    }
+
+    public class transformdummy
+    {
+        public Vector3 position;
+        public void Translate(Vector3 dummy) { }
+    }
+
+    public class AnimationState
+    {
+        public int layer;
+        public AnimationBlendMode blendMode;
+        public WrapMode wrapMode;
+        public float speed;
+    }
+
+    public class animationdummy
+    {
+        public void CrossFade(string s) { }
+        AnimationState asd = new AnimationState();
+        public AnimationState this[string s]
+        {
+            get { return asd; }
+        }
+    }
+    public class boundsdummy
+    {
+        public Vector3 size;
+    }
+    public class CapsuleCollider
+    {
+        public float radius;
+        public boundsdummy bounds = new boundsdummy();
+    }
+
+    public class MonoBehaviour
+    {
+        public transformdummy transform = new transformdummy();
+        public animationdummy animation = new animationdummy();
+    }
+    public class GameObject
+    {
+        public transformdummy transform = new transformdummy();
+        public CapsuleCollider collider = new CapsuleCollider();
+        public GameObject(Vector3 pos, Vector3 colBoundSize, float capCollRadius)
+        {
+            this.transform.position = pos;
+            this.collider.bounds.size = colBoundSize;
+            this.collider.radius = capCollRadius;
+        }
+        public static GameObject Find(string name)
+        {
+            switch (name)
+            {
+                case "/Wall_Right":
+                    return new GameObject(new Vector3(4.0F, 1.736009F, -5.854808F), new Vector3(1,7,20), 0);
+                    break;
+                case "/Wall_Left":
+                    return new GameObject(new Vector3(-4.0F, 1.736009F, -5.857873F), new Vector3(1,7,20), 0);
+                    break;
+                case "/Black":
+                    return new GameObject(new Vector3(-1.179642F, 1.75F, -12.29286F), new Vector3(0.875F,3.5F,0.875F), 0.5F);
+                    break;
+                case "/Floor":
+                    return new GameObject(new Vector3(0,0,-2.852886F), new Vector3(20,0.05F,25), 0);
+                    break;
+                default:
+                    return new GameObject(Vector3.zero, Vector3.zero, 0);
+            }
+        }
+    }
+}
+#endif
+
 //this just allows us to pass one as a parameter, by reference to the actual values (classes are passed by reference... Vector3 structs are not...)
 //thus we can pass it once and update at once location and not have to copy to all other places utilizing it every time it updates
 
@@ -29,7 +113,19 @@ public class FloatRefWrap
 //--Sensor--
 //Computer vision stub.
 //has a list of positions of sensed crowds
-public class CrowdDetectionSensor
+public abstract class CrowdDetectionSensorBase
+{
+    public abstract List<Vector3> CrowdsDetected();
+}
+public class UnitTestCrowdDetectionSensor : CrowdDetectionSensorBase
+{
+    public List<Vector3> crowds;
+    public override List<Vector3> CrowdsDetected()
+    {
+        return crowds;
+    }
+}
+public class CrowdDetectionSensor : CrowdDetectionSensorBase
 {
 	private BlockCrowd2 unityScriptAnchor;
     //will take UAV entity (ie BlockCrowd2) by reference
@@ -40,7 +136,7 @@ public class CrowdDetectionSensor
 
     //called by CrowdPercept in it's update()
     //returns list of egocentric vectors (pointing from UAV to Crowd objects)
-	public List<Vector3> CrowdsDetected()
+	public override List<Vector3> CrowdsDetected()
 	{
 		List<GameObject> simCrowds = new List<GameObject> ();
 		if (GameObject.Find ("/Red") != null)
@@ -177,7 +273,19 @@ public class CrowdPercept
 
 //--Sensor--
 //returns vector3 position of uav relative to Hokuyo.
-public class Hokuyo
+public abstract class HokuyoBase
+{
+    public abstract Vector3 HokuyoSensorData();
+}
+public class UnitTestHokuyo : HokuyoBase
+{
+    public Vector3 uavLocFromSensor;
+    public override Vector3 HokuyoSensorData()
+    {
+        return uavLocFromSensor;
+    }
+}
+public class Hokuyo : HokuyoBase
 {
 	private BlockCrowd2 unityScriptAnchor;
 	public Hokuyo(BlockCrowd2 _unityScriptAnchor)
@@ -187,7 +295,7 @@ public class Hokuyo
 	
 	//TODO: expand on this, from ground-truth to a simple simulation of the hokuyo planar laser ranger
     //called by LocalizationPercept_Hokuyo
-	public Vector3 HokuyoSensorData()
+	public override Vector3 HokuyoSensorData()
 	{
 		//note that we are returning the UAV's location *relative to the hokuyo*; this is all we get from such a sensor at best
 		Vector3 hokuyoLocation = new Vector3(
@@ -233,8 +341,8 @@ public class LocalizationPercept_Hokuyo
 	{
 		get { return floor; }
 	}
-	private Hokuyo sensor;
-	public LocalizationPercept_Hokuyo(BlockCrowd2 _unityScriptAnchor, Hokuyo _sensor)
+    private HokuyoBase sensor;
+    public LocalizationPercept_Hokuyo(BlockCrowd2 _unityScriptAnchor, HokuyoBase _sensor)
 	{
 		this.unityScriptAnchor = _unityScriptAnchor;
 		this.sensor = _sensor;
@@ -466,6 +574,7 @@ public class Rand2D : UAVMotorSchema
 //pass to motor schemas and what motor schemas or child behaviors to use to accomplish their behavior."
 public abstract class UAVBehavior
 {
+    protected bool innateReleaser;
     //the behavior's response, which will be the sum of its child behaviors' and motor schemas' responses
 	protected Vector3 responseTranslate;
 	public Vector3	ResponseTranslate
@@ -711,18 +820,45 @@ public class ThreateningRand2D : UAVBehavior
 //released depending on distance of closest crowd.  Released == added to list of childBehaviors
 
 //Uses: KeepHeight and HoldCenter
+//Released by: watchZone
 public class Watching : UAVBehavior
 {
 	public static Vector3 keepheightDbgLineOffset = new Vector3(1, 1, 0);
 	public static Vector3 followishDbgLineOffset = new Vector3(1, 1, 0);
 	public Watching(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
 	{
-		childBehaviors.Add ("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.AboveEyeLevel));
-		childBehaviors.Add ("holdctr", new HoldCenter(_unityScriptAnchor));
+        //childBehaviors.Add ("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.AboveEyeLevel));
+        //childBehaviors.Add ("holdctr", new HoldCenter(_unityScriptAnchor));
 	}
 		//TODO: perhaps GazeStatic(forward) as well
 	public override void Update ()
 	{
+        innateReleaser = _unityScriptAnchor.watchZone;
+
+        //Innate releasing mechanism
+        if (innateReleaser)
+        {
+            if (!childBehaviors.ContainsKey("keepheight"))
+            {
+                childBehaviors.Add("keepheight", new KeepHeight(_unityScriptAnchor,
+                    (float)_unityScriptAnchor.AboveEyeLevel));
+            }
+            if (!childBehaviors.ContainsKey("holdctr"))
+            {
+                childBehaviors.Add("holdctr", new HoldCenter(_unityScriptAnchor));
+            }
+        }
+        else
+        {
+            if (childBehaviors.ContainsKey("keepheight")){
+                childBehaviors.Remove("keepheight");
+            }
+            if (childBehaviors.ContainsKey("holdctr"))
+            {
+                childBehaviors.Remove("holdctr"));
+            }
+        }
+                
 		base.Update ();
 		
 		Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset, 
@@ -739,6 +875,7 @@ public class Watching : UAVBehavior
 	}
 }
 //Uses: KeepHeight and Follow
+//Released by: approachZone
 public class Approaching : UAVBehavior
 {
 	public Approaching(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -765,6 +902,7 @@ public class Approaching : UAVBehavior
 	}
 }
 //Uses: KeepHeight, Follow and ThreateningRand2D
+//Released by: threatenZone
 public class Threatening : UAVBehavior
 {
 	public Threatening(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -983,6 +1121,11 @@ public class BlockCrowd2 : MonoBehaviour {
 	public double randThreaten2DDepth = 1.0;
     public double randThreaten2DInterval = 0.2;
 
+    //Innate Releaser states
+    bool approachZone = false;
+    bool threatenZone = false;
+    bool watchZone = false;
+
 	//desired movement in next dt/time interval/frame
 	private Vector3 overallResponse_Translation;
 	private Vector3 overallResponse_Rotation;
@@ -1018,7 +1161,7 @@ public class BlockCrowd2 : MonoBehaviour {
 	}
 
 	// Use this for initialization
-	void Start () {
+	public void Start () {
         //these aren't changed after Start()--------
 		this.crowdSensor = new CrowdDetectionSensor (this);
 		crowdPercept = new CrowdPercept (this, this.crowdSensor);
@@ -1053,17 +1196,22 @@ public class BlockCrowd2 : MonoBehaviour {
 	}
 	
 	// Update is called once per frame
-	void Update () {
+	public void Update () {
         //this line makes the rotors spin realistically... it's cosmetic
 		animation.CrossFade("Spin");
 
 		this.locPerceptHokuyo.Update ();
 		this.crowdPercept.Update ();
 
-		
+        //
+		//---------------------------INNATE RELEASERS---------------------------------------------
+        //
+
 		//releasers; behaviors happen to be mutually exclusive (motor schema employed by them are not)
-		bool approachZone = false;
-		bool threatenZone = false;
+        //TODO: should probably factor these out even more so that release state is determined within behaviors
+        watchZone = false;
+		approachZone = false;
+		threatenZone = false;
 		if ( crowdPercept.BlockableCrowdCount > 0 )
 		{
 			float distToFirstCrowd = Math.Abs(CrowdPercept.BlockableCrowds[0].val.z - locPerceptHokuyo.HokuyoLoc.val.z);
@@ -1075,33 +1223,42 @@ public class BlockCrowd2 : MonoBehaviour {
 			{
 				approachZone = true;
 			}
+            if ( distToFirstCrowd > approachRange )
+            {
+                watchZone = true;
+            }
 		}
 
-		if (threatenZone) {
-			if ( !this.behaviors.ContainsKey("threaten") )
-			{
-				this.behaviors.Remove("approach");
-				this.behaviors.Remove("watch");
-				this.behaviors.Add("threaten", new Threatening(this));
-				Debug.Log ("threatening");
-			}
-		} else if (approachZone) {
-			if ( !this.behaviors.ContainsKey("approach") )
-			{
-				this.behaviors.Remove("threaten");
-				this.behaviors.Remove("watch");
-				this.behaviors.Add("approach", new Approaching(this));
-				Debug.Log ("approaching");
-			}
-		} else {
-			if (!this.behaviors.ContainsKey("watch"))
-			{
-				this.behaviors.Remove("approach");
-				this.behaviors.Remove("threaten");
-				this.behaviors.Add("watch", new Watching(this));
-				Debug.Log ("watching");
-			}
-		}
+        //if (threatenZone) {
+        //    if ( !this.behaviors.ContainsKey("threaten") )
+        //    {
+        //        this.behaviors.Remove("approach");
+        //        this.behaviors.Remove("watch");
+        //        this.behaviors.Add("threaten", new Threatening(this));
+        //        Debug.Log ("threatening");
+        //    }
+        //} else if (approachZone) {
+        //    if ( !this.behaviors.ContainsKey("approach") )
+        //    {
+        //        this.behaviors.Remove("threaten");
+        //        this.behaviors.Remove("watch");
+        //        this.behaviors.Add("approach", new Approaching(this));
+        //        Debug.Log ("approaching");
+        //    }
+        //} else {
+        //    if (!this.behaviors.ContainsKey("watch"))
+        //    {
+        //        this.behaviors.Remove("approach");
+        //        this.behaviors.Remove("threaten");
+        //        this.behaviors.Add("watch", new Watching(this));
+        //        Debug.Log ("watching");
+        //    }
+        //}
+
+        //
+        //----------------------END INNATE RELEASERS------------------------------------------------
+        //
+
 
 		this.overallResponse_Rotation = Vector3.zero;
 		this.overallResponse_Translation = Vector3.zero;
