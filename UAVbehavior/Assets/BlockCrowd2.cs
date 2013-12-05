@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System;
 
 #if DEBUG
-
 namespace UnityEngine
 {
     public class Debug
@@ -13,6 +12,15 @@ namespace UnityEngine
         public static void LogWarning(string s) { Console.WriteLine(s); }
         public static void LogError(string s) { Console.WriteLine(s); }
         public static void DrawLine(Vector3 start, Vector3 end, Color color) { }
+    }
+
+    public class Time
+    {
+        public static float time
+        {
+            get { return System.DateTime.Now.Ticks; }
+        }
+        public static float deltaTime = 0.01F;
     }
 
     public class transformdummy
@@ -52,11 +60,25 @@ namespace UnityEngine
     {
         public transformdummy transform = new transformdummy();
         public animationdummy animation = new animationdummy();
+        public GameObject gameObject = new GameObject();
     }
-    public class GameObject
+    public class materialdummy
+    {
+        public Color color;
+    }
+    public class rendererdummy
+    {
+        public materialdummy material = new materialdummy();
+    }
+    public class GameObject : UnityEngine.Object
     {
         public transformdummy transform = new transformdummy();
         public CapsuleCollider collider = new CapsuleCollider();
+        public rendererdummy renderer = new rendererdummy();
+        public GameObject()
+        {
+
+        }
         public GameObject(Vector3 pos, Vector3 colBoundSize, float capCollRadius)
         {
             this.transform.position = pos;
@@ -82,6 +104,28 @@ namespace UnityEngine
                 default:
                     return new GameObject(Vector3.zero, Vector3.zero, 0);
             }
+        }
+        public static GameObject[] FindGameObjectsWithTag(string tag)
+        {
+            return new GameObject[10];
+        }
+    }
+
+    public class Random
+    {
+        public static float seed;
+        public static float value
+        {
+            get
+            {
+                System.Random rnd = new System.Random((int)System.DateTime.Now.Ticks);
+                return (float)rnd.NextDouble();
+            }
+        }
+        public static float Range(float min, float max)
+        {
+            System.Random rnd = new System.Random((int)System.DateTime.Now.Ticks);
+            return (float)rnd.NextDouble() * (max-min) + min;
         }
     }
 }
@@ -138,15 +182,10 @@ public class CrowdDetectionSensor : CrowdDetectionSensorBase
     //returns list of egocentric vectors (pointing from UAV to Crowd objects)
 	public override List<Vector3> CrowdsDetected()
 	{
+        GameObject[] foundGOs = GameObject.FindGameObjectsWithTag("Crowd");
 		List<GameObject> simCrowds = new List<GameObject> ();
-		if (GameObject.Find ("/Red") != null)
-			simCrowds.Add (GameObject.Find ("/Red"));
-		if (GameObject.Find ("/Yellow") != null)
-			simCrowds.Add (GameObject.Find ("/Yellow"));
-		if (GameObject.Find ("/Blue") != null)
-			simCrowds.Add (GameObject.Find ("/Blue"));
-		if (GameObject.Find ("/Black") != null)
-			simCrowds.Add (GameObject.Find ("/Black"));
+        foreach (GameObject go in foundGOs)
+            simCrowds.Add(go);
 
         //list of egocentric vectors (pointing from UAV to Crowd objects)
 		List<Vector3> sensedCrowds = new List<Vector3> ();
@@ -165,8 +204,8 @@ public class CrowdDetectionSensor : CrowdDetectionSensorBase
 				sensedCrowds.Add(crowd.transform.position - unityScriptAnchor.transform.position);
 			}
 		}
-		if (sensedCrowds.Count > 4 || sensedCrowds.Count < 0)
-			Debug.Log("***** vector count exceeds crowd elements by: " + sensedCrowds.Count);
+		//if (sensedCrowds.Count > 4 || sensedCrowds.Count < 0)
+			//Debug.Log("***** vector count exceeds crowd elements by: " + sensedCrowds.Count);
 		return sensedCrowds;
 	}
 }
@@ -175,7 +214,7 @@ public class CrowdDetectionSensor : CrowdDetectionSensorBase
 //simulated generic crowd detection percept
 public class CrowdPercept
 {
-	CrowdDetectionSensor sensor;
+    CrowdDetectionSensorBase sensor;
 
 	List<Vector3RefWrap> blockableCrowds = new List<Vector3RefWrap>();
 
@@ -206,7 +245,7 @@ public class CrowdPercept
 
 	private BlockCrowd2 unityScriptAnchor;
 
-	public CrowdPercept (BlockCrowd2 _unityScriptAnchor, CrowdDetectionSensor _sensor)
+    public CrowdPercept(BlockCrowd2 _unityScriptAnchor, CrowdDetectionSensorBase _sensor)
 	{
 		this.sensor = _sensor;
 		this.unityScriptAnchor = _unityScriptAnchor;
@@ -221,7 +260,15 @@ public class CrowdPercept
 			//must be in front of block line
 			if (crowd.z < 0) //i.e. in front of the block line, and the UAV
 			{
-				sortCrowds.Add(Math.Abs (crowd.z), crowd);
+                int sortZ = (int)(crowd.z*1000.0F);
+                int yield = 100;
+                while (yield > 0 && sortCrowds.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
+                {
+                    yield--;
+                    sortZ++;
+                }
+
+				sortCrowds.Add(Math.Abs (sortZ), crowd);
 			}
 		}
 
@@ -433,8 +480,16 @@ public class PerpendicularExponentialIncrease : UAVMotorSchema
 			this.responseTranslate.x = this.fieldOrient.x * responseScale;
 			this.responseTranslate.y = this.fieldOrient.y * responseScale;
 			if (responseScale > 1 || responseScale < 0)
-				Debug.Log ("*****response scale (should be 0 to 1) = " + responseScale);
+                Debug.Log(unityScriptAnchor.DebugID+":*****response scale (should be 0 to 1) = " + responseScale);
+            /*
+            if (fieldOrient.x ==  -1 
+                && peakFieldStrength == 1
+                )
+            {
+                Debug.Log("PEI: " + maxFieldCoord.val + "," + minFieldCoord.val + "," + responseScale);
+            }*/
 		}
+
 		//Min and max field coordinates checked here, as well as response scale
 		//Debug.Log ("minFieldCoord.val=" + minFieldCoord.val + " maxFieldCoord.val=" + maxFieldCoord.val);
 	}
@@ -462,7 +517,7 @@ public class AttractiveExponentialDecrease : UAVMotorSchema
 		this.responseRotate = Vector3.zero;
 		//while preventing this is better, I don't believe it ever happens & this should verify that
 		if (capDistance == 0)
-			Debug.Log("*****WARNING: capdistance is 0, division by 0!");
+			Debug.Log(unityScriptAnchor.DebugID+": *****WARNING: capdistance is 0, division by 0!");
 		this.responseTranslate = Vector3.zero;
 		Vector3 fieldVecOrient = position.val; //away from UAV, toward position
 		//note infinite field range, exponential force proprotional to distance from desired position
@@ -474,6 +529,13 @@ public class AttractiveExponentialDecrease : UAVMotorSchema
 		{
 			responseVector = (fieldVecOrient / fieldVecOrient.magnitude) * responseScale;
 		}
+        /*
+        Debug.Log("AED: " + position.val.x
+            + "F," + position.val.y
+            + "F," + position.val.z
+            + "F," + responseVector.x
+            + "F," + responseVector.y
+            + "F," + responseVector.z);*/
 
 		if ( this.enableX )
 			this.responseTranslate.x = responseVector.x;
@@ -517,7 +579,14 @@ public class RepulsiveExponentialIncrease : UAVMotorSchema
 		//decay reaches 1% at capDistance, but strictly never reaches zero (always applies something)
 		float x = Math.Abs(fieldVecOrient.magnitude-this.deadZoneAroundPosition) / capDistance;
 		float responseScale = (float)(this.peakFieldStrength * Math.Pow (100, 0.0F-x));
-		Vector3 responseVector = (fieldVecOrient / fieldVecOrient.magnitude) * responseScale;
+        Vector3 responseVector = (fieldVecOrient / fieldVecOrient.magnitude) * responseScale;
+
+        /*Debug.Log("REI: " + position.val.x
+            + "F," + position.val.y
+            + "F," + position.val.z
+            + "F," + responseVector.x
+            + "F," + responseVector.y
+            + "F," + responseVector.z + "F");*/
 
 		if ( this.enableX )
 			this.responseTranslate.x = responseVector.x;
@@ -554,7 +623,7 @@ public class Rand2D : UAVMotorSchema
 		float x = position.val.magnitude / capDistance;
 		float responseScale = (float)Math.Pow (100, 0.0F-x) * (float)this.peakFieldStrength;
 		if (responseScale <= 0)
-			Debug.Log ("***** Rand2D responseScale == 0!");
+			Debug.Log (unityScriptAnchor.DebugID+": ***** Rand2D responseScale == 0!");
 		if (Time.time > this.changeTime) {
 			UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
             this.currRandMove.x = (2 * UnityEngine.Random.value - 1.0F);
@@ -654,7 +723,7 @@ public class KeepHeight : UAVBehavior
 		                                                                   (float)unityScriptAnchor.keepHeightStrength, 
 		                                                                   unityScriptAnchor));
 		if (msKey == "?")
-			Debug.Log ("*****KeepHeight.msKey=? - it should be floor or ceiling");
+			Debug.Log (unityScriptAnchor.DebugID+": *****KeepHeight.msKey=? - it should be floor or ceiling");
 	}
 	
 	public KeepHeight(BlockCrowd2 _unityScriptAnchor, float _height) : base(_unityScriptAnchor)
@@ -703,7 +772,7 @@ public class HoldCenter : UAVBehavior
 		if (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val == null ||
 						unityScriptAnchor.LocPerceptHokuyo.Floor.val == null ||
 						unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z == null)
-			Debug.Log ("*****Error, leftwall, floor or Hokuyo.z not detected");
+			Debug.Log (unityScriptAnchor.DebugID+": *****Error, leftwall, floor or Hokuyo.z not detected");
 		//Enable following line to see what readings your recieving when trying to center to hall.
 		//Debug.Log (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val + " : " + unityScriptAnchor.LocPerceptHokuyo.Floor.val + " : " + unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z);
 		base.Update ();
@@ -827,38 +896,12 @@ public class Watching : UAVBehavior
 	public static Vector3 followishDbgLineOffset = new Vector3(1, 1, 0);
 	public Watching(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
 	{
-        //childBehaviors.Add ("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.AboveEyeLevel));
-        //childBehaviors.Add ("holdctr", new HoldCenter(_unityScriptAnchor));
+        childBehaviors.Add ("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.AboveEyeLevel));
+        childBehaviors.Add ("holdctr", new HoldCenter(_unityScriptAnchor));
 	}
 		//TODO: perhaps GazeStatic(forward) as well
 	public override void Update ()
-	{
-        innateReleaser = _unityScriptAnchor.watchZone;
-
-        //Innate releasing mechanism
-        if (innateReleaser)
-        {
-            if (!childBehaviors.ContainsKey("keepheight"))
-            {
-                childBehaviors.Add("keepheight", new KeepHeight(_unityScriptAnchor,
-                    (float)_unityScriptAnchor.AboveEyeLevel));
-            }
-            if (!childBehaviors.ContainsKey("holdctr"))
-            {
-                childBehaviors.Add("holdctr", new HoldCenter(_unityScriptAnchor));
-            }
-        }
-        else
-        {
-            if (childBehaviors.ContainsKey("keepheight")){
-                childBehaviors.Remove("keepheight");
-            }
-            if (childBehaviors.ContainsKey("holdctr"))
-            {
-                childBehaviors.Remove("holdctr"));
-            }
-        }
-                
+	{           
 		base.Update ();
 		
 		Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset, 
@@ -995,7 +1038,7 @@ public class Avoid : UAVBehavior
 		                      new PerpendicularExponentialIncrease (fieldOrient, fieldMax, fieldMin, 
 		                                      (float)unityScriptAnchor.wallAvoidStrength, unityScriptAnchor));
 		if (msKey == "?")
-			Debug.Log ("***** Avoid behavior msKey not set!");
+			Debug.Log (unityScriptAnchor.DebugID+": ***** Avoid behavior msKey not set!");
 	}
 
 	public Avoid(BlockCrowd2 _unityScriptAnchor) : base(_unityScriptAnchor)
@@ -1121,6 +1164,9 @@ public class BlockCrowd2 : MonoBehaviour {
 	public double randThreaten2DDepth = 1.0;
     public double randThreaten2DInterval = 0.2;
 
+    private Vector3 lastPos;
+    public Vector3 velocity;
+
     //Innate Releaser states
     bool approachZone = false;
     bool threatenZone = false;
@@ -1135,6 +1181,11 @@ public class BlockCrowd2 : MonoBehaviour {
 
 	//we will follow suit and just move... despite appearances, movement won't be a function of tilt + engine thrust + gravity...
 	private double maxFauxTilt = 45.0; //max tilt appearance
+    private int debugID = 0;
+    public int DebugID
+    {
+        get { return debugID; }
+    }
 
 
 	public double simModelForce = 100.0; //multiplier for overallResponse_Translation...all field strengths are between 0 and 1--
@@ -1154,7 +1205,7 @@ public class BlockCrowd2 : MonoBehaviour {
 				get { return locPerceptHokuyo;}
 		}
 
-	private Dictionary<string,UAVBehavior> behaviors = new Dictionary<string, UAVBehavior>(); //
+	private Dictionary<string,UAVBehavior> behaviors = new Dictionary<string, UAVBehavior>();
 
 	public BlockCrowd2()
 	{
@@ -1186,19 +1237,29 @@ public class BlockCrowd2 : MonoBehaviour {
 		spin.wrapMode = WrapMode.Loop;
 		spin.speed = 2.0F;
 
-		GameObject blockLine = GameObject.Find ("/BlockLine");
+        lastPos = this.transform.position;
+
+		/*GameObject blockLine = GameObject.Find ("/BlockLine");
         //start position at block line, above eye level.  (only time z is set/changed)
 		transform.position = new Vector3(blockLine.transform.position.x, 
 		                     //(this.blockLine.transform.position.y-transform.position.y)+(float)wallAvoidDepth, 
 		                     GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Black").collider.bounds.size.y + 1.0F,
-		                     blockLine.transform.position.z);
-		Debug.Log ("Vectors shown in scene - Avoid:red; Height:blue; Followish:green; rand2d:yellow; overall:white");
+		                     blockLine.transform.position.z);*/
+        GameObject[] uavs = GameObject.FindGameObjectsWithTag("UAV");
+        for (int u = 0; u < uavs.Length; u++)
+        {
+            if (uavs[u] == this.gameObject)
+                this.debugID = u;
+        }
 	}
-	
-	// Update is called once per frame
-	public void Update () {
+
+    // Update is called once per frame
+    public void Update()
+    {
         //this line makes the rotors spin realistically... it's cosmetic
 		animation.CrossFade("Spin");
+        this.velocity = (transform.position - lastPos) / Time.deltaTime;
+        this.lastPos = transform.position;
 
 		this.locPerceptHokuyo.Update ();
 		this.crowdPercept.Update ();
@@ -1229,31 +1290,31 @@ public class BlockCrowd2 : MonoBehaviour {
             }
 		}
 
-        //if (threatenZone) {
-        //    if ( !this.behaviors.ContainsKey("threaten") )
-        //    {
-        //        this.behaviors.Remove("approach");
-        //        this.behaviors.Remove("watch");
-        //        this.behaviors.Add("threaten", new Threatening(this));
-        //        Debug.Log ("threatening");
-        //    }
-        //} else if (approachZone) {
-        //    if ( !this.behaviors.ContainsKey("approach") )
-        //    {
-        //        this.behaviors.Remove("threaten");
-        //        this.behaviors.Remove("watch");
-        //        this.behaviors.Add("approach", new Approaching(this));
-        //        Debug.Log ("approaching");
-        //    }
-        //} else {
-        //    if (!this.behaviors.ContainsKey("watch"))
-        //    {
-        //        this.behaviors.Remove("approach");
-        //        this.behaviors.Remove("threaten");
-        //        this.behaviors.Add("watch", new Watching(this));
-        //        Debug.Log ("watching");
-        //    }
-        //}
+        if (threatenZone) {
+            if ( !this.behaviors.ContainsKey("threaten") )
+            {
+                this.behaviors.Remove("approach");
+                this.behaviors.Remove("watch");
+                this.behaviors.Add("threaten", new Threatening(this));
+                Debug.Log (debugID+": threatening");
+            }
+        } else if (approachZone) {
+            if ( !this.behaviors.ContainsKey("approach") )
+            {
+                this.behaviors.Remove("threaten");
+                this.behaviors.Remove("watch");
+                this.behaviors.Add("approach", new Approaching(this));
+                Debug.Log (debugID+": approaching");
+            }
+        } else {
+            if (!this.behaviors.ContainsKey("watch"))
+            {
+                this.behaviors.Remove("approach");
+                this.behaviors.Remove("threaten");
+                this.behaviors.Add("watch", new Watching(this));
+                Debug.Log (debugID+": watching");
+            }
+        }
 
         //
         //----------------------END INNATE RELEASERS------------------------------------------------
@@ -1291,4 +1352,11 @@ public class BlockCrowd2 : MonoBehaviour {
 		//transform.eulerAngles = new Vector3 (transform.eulerAngles.x, transform.eulerAngles.y, this.rigidbody.velocity.x<0?tiltMagnitude:0.0F-tiltMagnitude);
 
 	}
+    /* failed attempt to make note of collisions which might happen in the simulation; rigidbody/etc. are a little tricky to do this without actually using physics, maybe impossible
+    public void OnCollisionUpdate(Collision collision)
+    {
+        this.collider.enabled = true;
+        this.rigidbody.useGravity = true;
+        this.enabled = false;
+    }*/
 }

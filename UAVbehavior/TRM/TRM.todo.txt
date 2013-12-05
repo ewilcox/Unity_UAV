@@ -1,0 +1,28 @@
+UAV settings now a "prefab" so they can be spawned in multiples
+-click project tab
+-click root assets folder
+-click SpawnedUAV in Assets list
+-settings are on Inspector tab
+
+crowd settings now a "prefab" so they can be spawned repeatedly
+-click project tab
+-click root assets folder
+-click SpawnedCrowd in Assets list
+-settings are on Inspector tab
+
+front wall shows [blocked/failed(% blocked)]
+
+crowd spawn settings:
+-click front wall
+-see "spawn crowds" script
+-crowds per spawn, spawn interval are legitimate settings; just simple periodic spawn of crowds
+	-random spawn, much like in PersonMove handout
+	-crowds are now scared of motion towards them, depending upon distance and speed of motion
+	-crowds despawn after passing the line (fail) or going back a couple units after getting scared (pass)
+
+UAV spawn settings (default is 3, but can do whatever "n")
+-click front wall
+-see "spawn uavs" script
+-uav count specified here
+	-uavs spawn randomly along 'block line'
+

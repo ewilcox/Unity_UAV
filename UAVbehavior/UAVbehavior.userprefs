@@ -1,8 +1,10 @@
 ﻿<Properties>
-  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" PreferredExecutionTarget="MonoDevelop.Default" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Assets\BlockCrowd2.cs">
     <Files>
-      <File FileName="Assets\BlockCrowd2.cs" Line="1101" Column="3" />
+      <File FileName="..\..\..\peerProjects\Wang Zhou\UAVbehavior\Assets\Spawn.js" Line="1" Column="1" />
+      <File FileName="Assets\BlockCrowd2.cs" Line="1" Column="1" />
+      <File FileName="Assets\PersonMove.js" Line="1" Column="1" />
     </Files>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.DebuggingService.Breakpoints>
