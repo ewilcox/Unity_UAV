@@ -1,0 +1,11 @@
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\Assembly-CSharp.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\Assembly-CSharp.pdb
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\UnityEditor.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\UnityEngine.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\Mono.Cecil.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\nunit.framework.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\Unity.DataContract.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\Temp\bin\Debug\ICSharpCode.NRefactory.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\obj\Debug\Assembly-CSharp-vs.csprojResolveAssemblyReference.cache
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\obj\Debug\Assembly-CSharp.dll
+C:\Users\SOME RANDOM-AZZ DUDE\Documents\GitHub\Unity_UAV\UAVbehavior\obj\Debug\Assembly-CSharp.pdb
