@@ -272,20 +272,31 @@ public class CrowdPercept
             {
                 if (crowd.magnitude > (uav.val - crowd).magnitude)
                 {
-                    int sortZ = (int)(crowd.z * 1000.0F);
+                    int sortZ = 0 - (int)(crowd.z * 1000.0F);
                     int sortFixTries = 100;
-					while (sortFixTries > 0 && crowdsCloserToThem.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
-                    {
-						sortFixTries--;
-                        sortZ++;
-                    }
+					//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
+                    do {
+						try
+						{
+							crowdsCloserToThem.Add(sortZ, crowd);
+						}
+						catch(System.ArgumentException e )
+						{
+							sortFixTries--;
+							sortZ--;
+							continue;
+						}
+						break;
+					} while (sortFixTries > 0);
+
 					if ( sortFixTries == 0 )
 						Debug.Log("failed to sort crowds distinctly: " + crowd + ", @" + sortZ);
-                    crowdsCloserToThem.Add(sortZ, crowd);
                 }
             }
 			if ( crowdsCloserToThem.Count > 0 )
 			{
+                Debug.DrawLine(unityScriptAnchor.transform.position, unityScriptAnchor.transform.position + crowdsCloserToThem[crowdsCloserToThem.Keys[0]],
+                    Color.red);
 	            foreach (Vector3 crowd in crowdsWeMightBlock)
 	            {
 	                if (crowd == crowdsCloserToThem[crowdsCloserToThem.Keys[0]])
@@ -297,32 +308,31 @@ public class CrowdPercept
 			}
         }
 
-
-
-
-
-
-
-
-
-
-
         SortedList<float, Vector3> sortCrowds = new SortedList<float, Vector3>();
         foreach (Vector3 crowd in crowdsWeMightBlock)
         {
             //must be in front of block line
             if (crowd.z < 0) //i.e. in front of the block line, and the UAV
             {
-                int sortZ = (int)(crowd.z * 1000.0F);
+                int sortZ = 0 - (int)(crowd.z * 1000.0F);
 				int sortFixTries = 100;
-				while (sortFixTries > 0 && sortCrowds.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
-                {
-					sortFixTries--;
-                    sortZ++;
-				}
+				//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
+				do {
+					try
+					{
+						sortCrowds.Add(Math.Abs(sortZ), crowd);
+					}
+					catch(System.ArgumentException e )
+					{
+						sortFixTries--;
+						sortZ--;
+						continue;
+					}
+					break;
+				} while (sortFixTries > 0);
+				
 				if ( sortFixTries == 0 )
 					Debug.Log("failed to sort crowds distinctly: " + crowd + ", @" + sortZ);
-                sortCrowds.Add(Math.Abs(sortZ), crowd);
             }
         }
 
@@ -348,6 +358,9 @@ public class CrowdPercept
             //This debug verified when they are out of range their values are reset to max values, as they move back into range they are reset.
             //Debug.Log("x["+i+"]="+blockableCrowds[i].val.x + "y["+i+"]="+ blockableCrowds[i].val.y+"z["+i+"]="+blockableCrowds[i].val.z);
         }
+        if ( blockableCrowdCount > 0 )
+            Debug.DrawLine(unityScriptAnchor.transform.position, unityScriptAnchor.transform.position + blockableCrowds[0].val,
+                Color.green);
         sensedCrowdCount = crowds.Count;
         while (sensedCrowdCount > this.sensedCrowds.Count)
             sensedCrowds.Add(new Vector3RefWrap(Vector3.zero));
@@ -373,7 +386,6 @@ public class CrowdPercept
     }
 }
 
-//TODO: REFACTOR**
 //need ordered list of blockable UAV's for AvoidUAV's
 public class Hokuyo
 {
@@ -385,7 +397,7 @@ public class Hokuyo
         this.unityScriptAnchor = _unityScriptAnchor;
         hokuyoLocation = new Vector3(
             GameObject.Find("/Wall_Left").transform.position.x + GameObject.Find("/Wall_Left").collider.bounds.size.x / 2,
-            GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.HallwaySize / 2.0F,
+            GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.hallwayHeight / 2.0F,
             GameObject.Find("/BlockLine").transform.position.z);
     }
     //returns list of vectors from the sensor (hokuyo) to the various UAVs 'detected' by this sensor...
@@ -475,7 +487,7 @@ public class LocalizationSensor
         unityScriptAnchor = _unityScriptAnchor;
         hokuyoLocation = new Vector3(
             GameObject.Find("/Wall_Left").transform.position.x + GameObject.Find("/Wall_Left").collider.bounds.size.x / 2,
-            GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.HallwaySize / 2.0F,
+            GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.hallwayHeight / 2.0F,
             GameObject.Find("/BlockLine").transform.position.z);
     }
 
@@ -538,9 +550,9 @@ public class LocalizationPercept
         hokuyoLoc.val = Vector3.zero - uavLoc.val;
         //and then we need to know where the walls are:
         this.rightWall.val = hokuyoLoc.val.x;
-        this.leftWall.val = rightWall.val + (float)unityScriptAnchor.HallwaySize;
-        this.ceiling.val = hokuyoLoc.val.y + (float)unityScriptAnchor.HallwaySize / 2.0F;
-        this.floor.val = hokuyoLoc.val.y - (float)unityScriptAnchor.HallwaySize / 2.0F;
+        this.leftWall.val = rightWall.val + (float)unityScriptAnchor.HallwayWidth;
+        this.ceiling.val = hokuyoLoc.val.y + (float)unityScriptAnchor.hallwayHeight / 2.0F;
+        this.floor.val = hokuyoLoc.val.y - (float)unityScriptAnchor.hallwayHeight / 2.0F;
     }
 }
 
@@ -907,26 +919,26 @@ public class HoldCenter : UAVBehavior
         : base(_unityScriptAnchor)
     {
         midPoint = new Vector3RefWrap(new Vector3(
-            _unityScriptAnchor.LocPercept.LeftWall.val - (float)_unityScriptAnchor.HallwaySize / 2.0F,
+            _unityScriptAnchor.LocPercept.LeftWall.val - (float)_unityScriptAnchor.HallwayWidth / 2.0F,
             _unityScriptAnchor.LocPercept.Floor.val + (float)_unityScriptAnchor.AboveEyeLevel,
             _unityScriptAnchor.LocPercept.HokuyoLoc.val.z
             ));
         this.motorSchema.Add("ms", new AttractiveExponentialDecrease(_unityScriptAnchor, midPoint,
                                                              (float)_unityScriptAnchor.holdPositionStrength,
-                                                                       (float)_unityScriptAnchor.HallwaySize, true, false, false)
+                                                                       (float)_unityScriptAnchor.HallwayWidth, true, false, false)
                 );
     }
 
     public override void Update()
     {
-        midPoint.val.x = unityScriptAnchor.LocPercept.LeftWall.val - (float)unityScriptAnchor.HallwaySize / 2.0F;
+        midPoint.val.x = unityScriptAnchor.LocPercept.LeftWall.val - (float)unityScriptAnchor.HallwayWidth / 2.0F;
         midPoint.val.y = unityScriptAnchor.LocPercept.Floor.val + (float)unityScriptAnchor.AboveEyeLevel;
         midPoint.val.z = unityScriptAnchor.LocPercept.HokuyoLoc.val.z;
 
         //This debug should really be based on maximum sensor ranges ( distance > max ), but used null here for Unity environment
-        if (unityScriptAnchor.LocPercept.LeftWall.val == null ||
-                        unityScriptAnchor.LocPercept.Floor.val == null ||
-                        unityScriptAnchor.LocPercept.HokuyoLoc.val.z == null)
+        if (unityScriptAnchor.LocPercept.LeftWall == null ||
+                        unityScriptAnchor.LocPercept.Floor == null ||
+                        unityScriptAnchor.LocPercept.HokuyoLoc == null)
             Debug.Log(unityScriptAnchor.DebugID + ": *****Error, leftwall, floor or Hokuyo.z not detected");
         //Enable following line to see what readings your recieving when trying to center to hall.
         //Debug.Log (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val + " : " + unityScriptAnchor.LocPerceptHokuyo.Floor.val + " : " + unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z);
@@ -954,7 +966,7 @@ public class Follow : UAVBehavior
         //TODO: transform the crowd projection to take eye-level height into account; then, enable Y-dimension field from this, and get rid of the KeepHeight in Follow-state.
         this.motorSchema.Add("ms", new AttractiveExponentialDecrease(_unityScriptAnchor, crowdProjectOnPlane,
                                                              (float)_unityScriptAnchor.followStrength,
-                                                             (float)_unityScriptAnchor.HallwaySize * 0.70F,
+                                                             (float)_unityScriptAnchor.HallwayWidth * 0.40F,
                                                              true, false, false)
                 );
     }
@@ -1061,7 +1073,7 @@ public class Watching : UAVBehavior
         : base(_unityScriptAnchor)
     {
         childBehaviors.Add("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.AboveEyeLevel));
-        childBehaviors.Add("holdctr", new HoldCenter(_unityScriptAnchor));
+		childBehaviors.Add("holdctr", new HoldCenter(_unityScriptAnchor));
     }
     //TODO: perhaps GazeStatic(forward) as well
     public override void Update()
@@ -1104,7 +1116,7 @@ public class Approaching : UAVBehavior
         : base(_unityScriptAnchor)
     {
         childBehaviors.Add("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.EyeLevel));
-        childBehaviors.Add("follow", new Follow(_unityScriptAnchor));
+		childBehaviors.Add("follow", new Follow(_unityScriptAnchor));
     }
     //TODO: perhaps GazeNearest(Ci)
     public override void Update()
@@ -1135,7 +1147,7 @@ public class Threatening : UAVBehavior
     {
         childBehaviors.Add("keepheight", new KeepHeight(_unityScriptAnchor, (float)_unityScriptAnchor.EyeLevel));
         childBehaviors.Add("follow", new Follow(_unityScriptAnchor));
-        childBehaviors.Add("rand2d", new ThreateningRand2D(_unityScriptAnchor));
+		childBehaviors.Add("rand2d", new ThreateningRand2D(_unityScriptAnchor));
         //TODO: perhaps GazeStatic(forward) as well
     }
     public override void Update()
@@ -1315,11 +1327,12 @@ public class BlockCrowd2 : MonoBehaviour
 {
     //for largely cosmetic reasons, there's no ceiling in the scene, so we stub it in here
     //these values are actually initialized in start()..these values are just to make the compiler happy
-    private double hallwaySize = 7.5;
-    public double HallwaySize
+    private double hallwayWidth = -1;
+    public double HallwayWidth
     {
-        get { return hallwaySize; }
+        get { return hallwayWidth; }
     }
+    public double hallwayHeight = 7.5; //"12 feet"; there is no ceiling object in the unity scene
     private double eyeLevel = 0.0;
     public double EyeLevel
     {
@@ -1360,7 +1373,6 @@ public class BlockCrowd2 : MonoBehaviour
     public Vector3 velocity;
 
     //Innate Releaser states
-    //TODO: are these used?...yes
     private bool approachZone = false;
     public bool ApproachZone
     {
@@ -1385,7 +1397,7 @@ public class BlockCrowd2 : MonoBehaviour
     private AnimationState spin;
 
     //we will follow suit and just move... despite appearances, movement won't be a function of tilt + engine thrust + gravity...
-    private double maxFauxTilt = 45.0; //max tilt appearance
+    //private double maxFauxTilt = 45.0; //max tilt appearance
     private int debugID = 0;
     public int DebugID
     {
@@ -1437,7 +1449,7 @@ public class BlockCrowd2 : MonoBehaviour
         this.crowdPercept = new CrowdPercept(this, this.crowdSensor, this.uavPS);
 
         //may want to change the find"black" gameobject to another percept for setting initial positions, suggest something from Hokuyo sensor possibly
-        this.hallwaySize = Math.Abs(GameObject.Find("/Wall_Right").transform.position.x - GameObject.Find("/Wall_Left").transform.position.x) - GameObject.Find("/Wall_Left").collider.bounds.size.x;
+        this.hallwayWidth = Math.Abs(GameObject.Find("/Wall_Right").transform.position.x - GameObject.Find("/Wall_Left").transform.position.x) - GameObject.Find("/Wall_Left").collider.bounds.size.x;
         this.eyeLevel = GameObject.Find("/Black").collider.bounds.size.y - 0.15F;
         this.aboveEyeLevel = GameObject.Find("/Black").collider.bounds.size.y + 1.0F;
         this.crowdAvoidDeadZone = ((CapsuleCollider)GameObject.Find("/Black").collider).radius;
@@ -1449,11 +1461,8 @@ public class BlockCrowd2 : MonoBehaviour
 
         //behaviors always exist in 'behaviors' list but are turned on by releasers
         //(ie their motor response is added to response.translate)
-        //this.behaviors.Add("avoid", new Avoid(this));
         this.behaviors.Add("threaten", new Threatening(this));
-        //TODO: add to behavior when released: Debug.Log ("threatening");
         this.behaviors.Add("approach", new Approaching(this));
-        //TODO: add to behavior when released: Debug.Log ("approaching");
         this.behaviors.Add("watch", new Watching(this));
 
         //innate releasers
@@ -1477,12 +1486,16 @@ public class BlockCrowd2 : MonoBehaviour
                              //(this.blockLine.transform.position.y-transform.position.y)+(float)wallAvoidDepth, 
                              GameObject.Find ("/Floor").transform.position.y + GameObject.Find ("/Black").collider.bounds.size.y + 1.0F,
                              blockLine.transform.position.z);*/
+#if DEBUG
+        this.debugID = 0;
+#else
         GameObject[] uavs = GameObject.FindGameObjectsWithTag("UAV");
         for (int u = 0; u < uavs.Length; u++)
         {
             if (uavs[u] == this.gameObject)
                 this.debugID = u;
         }
+#endif
     }
 
     // Update is called once per frame
@@ -1521,6 +1534,10 @@ public class BlockCrowd2 : MonoBehaviour
             {
                 watchZone = true;
             }
+        }
+        else
+        {
+            watchZone = true;
         }
 
         //

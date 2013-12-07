@@ -37,7 +37,7 @@ function Start(){
 	var maxZ = GameObject.Find("/Wall_Front").transform.position.z;
 	maxZ = maxZ + GameObject.Find("/Wall_Front").collider.bounds.size.z/2;
 	maxZ = maxZ + collider.bounds.size.z/2;
-	minZ = maxZ + 3;
+	var minZ = maxZ + 3;
 	var maxX = GameObject.Find("/Wall_Right").transform.position.x;
 	maxX = maxX - GameObject.Find("/Wall_Right").collider.bounds.size.x/2;
 	maxX = maxX - collider.bounds.size.x/2;
@@ -64,7 +64,10 @@ function Start(){
     uavs = GameObject.FindGameObjectsWithTag("UAV");
 	for(var c=0; c<uavs.length; c=c+1)
 	{
-		var cVel = uavs[c].GetComponent("BlockCrowd2").velocity;
+		var bc2 = uavs[c].GetComponent("BlockCrowd2");
+		if ( bc2 == null )//I think unity is sometimes actually making a fourth gameobject... a kind of fake one, maybe for the disabled uav in the scene?  ignore...
+			continue;
+		var cVel = bc2.velocity;
 		var motion = cVel.magnitude;
 		var angle = Mathf.Acos(Vector3.Dot(cVel.normalized,((transform.position+myEye)-uavs[c].transform.position).normalized));
 		sqrLen = (uavs[c].transform.position - (transform.position+myEye)).sqrMagnitude;

@@ -6,17 +6,21 @@ public class SpawnCrowds : MonoBehaviour {
     public int crowdsPerSpawn = 5;
     public double spawnIntervalSeconds = 5;
     private System.DateTime lastSpawn;
+	private float deltaTotal = 0;
     public int pass = 0;
     public int fail = 0;
 
 
 	// Use this for initialization
 	void Start () {
+		deltaTotal = (float)spawnIntervalSeconds;
 	}
 	
 	// Update is called once per frame
 	void Update () {
-        if ((System.DateTime.Now - lastSpawn).TotalSeconds > spawnIntervalSeconds)
+		deltaTotal += Time.deltaTime;
+        //if ((System.DateTime.Now - lastSpawn).TotalSeconds > spawnIntervalSeconds)
+		if ( deltaTotal > spawnIntervalSeconds )
         {
             DoSpawn();
         }
@@ -35,6 +39,7 @@ public class SpawnCrowds : MonoBehaviour {
             newCrowd.renderer.material.color = new Color(Random.Range(0.0F, 1.0F), Random.Range(0.0F, 1.0F), Random.Range(0.0F, 1.0F), 1);
 
         }
-        lastSpawn = System.DateTime.Now;
+        //lastSpawn = System.DateTime.Now;
+		deltaTotal = 0;
     }
 }
