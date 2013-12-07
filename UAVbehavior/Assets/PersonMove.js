@@ -1,5 +1,5 @@
 //speed variables
-var speed = 0.5;
+var speed = 1.0;
 
 //movement variables
 var startPos = Vector3.zero;

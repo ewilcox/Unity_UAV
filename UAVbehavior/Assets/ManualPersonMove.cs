@@ -3,7 +3,7 @@ using System.Collections;
 
 public class ManualPersonMove : MonoBehaviour {
 
-	public float movementScale = 0.01F;
+	public float movementScale = 2.0F;
 
 	// Use this for initialization
 	void Start () {

@@ -875,14 +875,15 @@ public class KeepHeight : UAVBehavior
     private float height;
 
     //the distance we want from the floor doesn't change, but coordinates are egocentric; the position of that height in question DOES change, relative to the UAV.
-    //this is a transformation of the floor percept from the planar laser sensor to the y-axis position desired
-    private FloatRefWrap heightRelative = new FloatRefWrap(0);
-
-    public void KeepHeightField(Wall _wall)
+	//this is a transformation of the floor percept from the planar laser sensor to the y-axis position desired
+	private FloatRefWrap heightRelative = new FloatRefWrap(0);
+	
+	public void KeepHeightField(Wall _wall)
     {
-        Vector3 fieldOrient = Vector3.zero;
-        FloatRefWrap fieldMax = new FloatRefWrap(0);
-        string msKey = "?";
+		Vector3 fieldOrient = Vector3.zero;
+		FloatRefWrap fieldMax = new FloatRefWrap(0);
+		FloatRefWrap fieldMin = new FloatRefWrap(0);
+		string msKey = "?";
         switch (_wall)
         {
             case Wall.Ceiling:
@@ -896,8 +897,8 @@ public class KeepHeight : UAVBehavior
                 msKey = "floor";
                 break;
         }
-        this.motorSchema.Add(msKey, new PerpendicularExponentialIncrease(fieldOrient, fieldMax, heightRelative,
-                                                                           (float)unityScriptAnchor.keepHeightStrength,
+		this.motorSchema.Add(msKey, new PerpendicularExponentialIncrease(fieldOrient, fieldMax, heightRelative,
+		                                                                 (float)unityScriptAnchor.keepHeightStrength,
                                                                            unityScriptAnchor));
         if (msKey == "?")
             Debug.Log(unityScriptAnchor.DebugID + ": *****KeepHeight.msKey=? - it should be floor or ceiling");
@@ -913,9 +914,9 @@ public class KeepHeight : UAVBehavior
 
     public override void Update()
     {
-        this.heightRelative.val = unityScriptAnchor.LocPercept.Floor.val + height;
-
-        base.Update();
+		this.heightRelative.val = unityScriptAnchor.LocPercept.Floor.val + height;
+		
+		base.Update();
     }
 }
 
@@ -1137,18 +1138,19 @@ public class Watching : UAVBehavior
 
         base.Update();
 
-
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
+		if (this.InnateReleaser) {
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset
-                        + this.childBehaviors["keepheight"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["keepheight"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.blue);
 
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset
-                        + this.childBehaviors["holdctr"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["holdctr"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.green);
+				}
     }
 }
 //Uses: KeepHeight and Follow
@@ -1167,18 +1169,20 @@ public class Approaching : UAVBehavior
 		if (!InnateReleaser && unityScriptAnchor.ApproachZone) Debug.Log(unityScriptAnchor.DebugID + ": approaching");
         this.InnateReleaser = unityScriptAnchor.ApproachZone;
         base.Update();
-
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
+		
+		if (this.InnateReleaser) {
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset
-                        + this.childBehaviors["keepheight"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["keepheight"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.blue);
 
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset
-                        + this.childBehaviors["follow"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["follow"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.green);
+				}
     }
 }
 //Uses: KeepHeight, Follow and ThreateningRand2D
@@ -1199,24 +1203,26 @@ public class Threatening : UAVBehavior
         this.InnateReleaser = unityScriptAnchor.ThreatenZone;
 
         base.Update();
-
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
+		
+		if (this.InnateReleaser) {
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset
-                        + this.childBehaviors["keepheight"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["keepheight"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.blue);
-
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
+                        
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset
-                        + this.childBehaviors["follow"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["follow"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.green);
 
-        Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
+						Debug.DrawLine (this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset,
                         this.unityScriptAnchor.transform.position + Watching.followishDbgLineOffset
-                        + this.childBehaviors["rand2d"].ResponseTranslate
-                        * (float)this.unityScriptAnchor.simModelForce,
+								+ this.childBehaviors ["rand2d"].ResponseTranslate
+								* (float)this.unityScriptAnchor.simModelForce,
                         Color.yellow);
+				}
     }
 }
 
@@ -1411,11 +1417,11 @@ public class BlockCrowd2 : MonoBehaviour
         get { return threatenHeight; }
     }
 
-    public double simDetectCrowdRange = 5.0;
-    public double approachRange = 5.0;
+    public double simDetectCrowdRange = 10.0;
+    public double approachRange = 8.0;
     public double threatenRange = 3.0;
 
-    public double wallAvoidStrength = 0.5;
+    public double wallAvoidStrength = 1.0;
     public double wallAvoidDepth = 0.4;
     public double crowdAvoidStrength = 1.0;
     private double crowdAvoidDeadZone = 0.0; //start repulsive field at crowd surface, not center
@@ -1433,7 +1439,7 @@ public class BlockCrowd2 : MonoBehaviour
     public double neighborUAVAvoidDepth = 0.4;
     public double keepHeightStrength = 0.4;
     public double holdPositionStrength = 0.25;
-    public double followStrength = 0.4;
+    public double followStrength = 1.0;
     public double randThreaten2DStrength = 0.1;
     public double randThreaten2DDepth = 1.0;
     public double randThreaten2DInterval = 0.2;
