@@ -215,6 +215,7 @@ public class CrowdDetectionSensor : CrowdDetectionSensorBase
 public class CrowdPercept
 {
     CrowdDetectionSensorBase sensor;
+    UAVPerceptSchema uavPS;
 
     List<Vector3RefWrap> blockableCrowds = new List<Vector3RefWrap>();
 
@@ -245,30 +246,82 @@ public class CrowdPercept
 
     private BlockCrowd2 unityScriptAnchor;
 
-    public CrowdPercept(BlockCrowd2 _unityScriptAnchor, CrowdDetectionSensorBase _sensor)
+    public CrowdPercept(BlockCrowd2 _unityScriptAnchor, CrowdDetectionSensorBase _sensor, UAVPerceptSchema _uavPS)
     {
         this.sensor = _sensor;
         this.unityScriptAnchor = _unityScriptAnchor;
+        this.uavPS = _uavPS;
     }
 
     public void Update()
     {
-        SortedList<float, Vector3> sortCrowds = new SortedList<float, Vector3>();
         //use simDetectCrowdRange to simulate data being available or not; return those within range.
         List<Vector3> crowds = sensor.CrowdsDetected();
-        foreach (Vector3 crowd in crowds)
+
+        //as part of the multi-agent behavior, we ignore the single closest crowd to each other UAV detected
+        //here, we are forming the 'blockable crowds' in the percept of this UAV
+        //so, we eliminate them from 'blockable', but not 'sensed' (we will still avoid them, but not try to block that one)
+
+        List<Vector3> crowdsWeMightBlock = new List<Vector3>();
+        foreach (Vector3 crowd in crowds)   //will pull one per UAV from this list
+            crowdsWeMightBlock.Add(crowd);
+        foreach (Vector3RefWrap uav in this.uavPS.UAVPercepts)
+        {
+            SortedList<float, Vector3> crowdsCloserToThem = new SortedList<float, Vector3>();
+            foreach (Vector3 crowd in crowdsWeMightBlock)   //note that each UAV crowd-ignore is from the subset remaining after the previous UAVs have been 'assigned' a crowd
+            {
+                if (crowd.magnitude > (uav.val - crowd).magnitude)
+                {
+                    int sortZ = (int)(crowd.z * 1000.0F);
+                    int sortFixTries = 100;
+					while (sortFixTries > 0 && crowdsCloserToThem.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
+                    {
+						sortFixTries--;
+                        sortZ++;
+                    }
+					if ( sortFixTries == 0 )
+						Debug.Log("failed to sort crowds distinctly: " + crowd + ", @" + sortZ);
+                    crowdsCloserToThem.Add(sortZ, crowd);
+                }
+            }
+			if ( crowdsCloserToThem.Count > 0 )
+			{
+	            foreach (Vector3 crowd in crowdsWeMightBlock)
+	            {
+	                if (crowd == crowdsCloserToThem[crowdsCloserToThem.Keys[0]])
+	                {
+	                    crowdsWeMightBlock.Remove(crowd);
+	                    break;
+	                }
+	            }
+			}
+        }
+
+
+
+
+
+
+
+
+
+
+
+        SortedList<float, Vector3> sortCrowds = new SortedList<float, Vector3>();
+        foreach (Vector3 crowd in crowdsWeMightBlock)
         {
             //must be in front of block line
             if (crowd.z < 0) //i.e. in front of the block line, and the UAV
             {
                 int sortZ = (int)(crowd.z * 1000.0F);
-                int yield = 100;
-                while (yield > 0 && sortCrowds.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
+				int sortFixTries = 100;
+				while (sortFixTries > 0 && sortCrowds.ContainsKey(Math.Abs(sortZ)))//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
                 {
-                    yield--;
+					sortFixTries--;
                     sortZ++;
-                }
-
+				}
+				if ( sortFixTries == 0 )
+					Debug.Log("failed to sort crowds distinctly: " + crowd + ", @" + sortZ);
                 sortCrowds.Add(Math.Abs(sortZ), crowd);
             }
         }
@@ -320,46 +373,122 @@ public class CrowdPercept
     }
 }
 
+//TODO: REFACTOR**
+//need ordered list of blockable UAV's for AvoidUAV's
+public class Hokuyo
+{
+    private BlockCrowd2 unityScriptAnchor;
+    private Vector3 hokuyoLocation;
+    //will take UAV entity (ie BlockCrowd2) by reference
+    public Hokuyo(BlockCrowd2 _unityScriptAnchor)
+    {
+        this.unityScriptAnchor = _unityScriptAnchor;
+        hokuyoLocation = new Vector3(
+            GameObject.Find("/Wall_Left").transform.position.x + GameObject.Find("/Wall_Left").collider.bounds.size.x / 2,
+            GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.HallwaySize / 2.0F,
+            GameObject.Find("/BlockLine").transform.position.z);
+    }
+    //returns list of vectors from the sensor (hokuyo) to the various UAVs 'detected' by this sensor...
+    //TODO: could still be a point cloud for the percept to interpret
+    public List<Vector3> robotsDetected()
+    {
+        GameObject[] foundGOs = GameObject.FindGameObjectsWithTag("UAV");
+        List<GameObject> simUAVs = new List<GameObject>();
+        foreach (GameObject go in foundGOs)
+            simUAVs.Add(go);
+
+        //list of vectors (pointing to UAV objects from Hokuyo)
+        List<Vector3> sensedUAVs = new List<Vector3>();
+        foreach (GameObject UAV in simUAVs)
+        {
+            sensedUAVs.Add(UAV.transform.position - hokuyoLocation);
+        }
+        return sensedUAVs;
+    }
+}
+//this takes the hokuyo sensor data, along with the localization percept, and forms percepts of 
+//other UAVs in the world besides this one
+public class UAVPerceptSchema
+{
+    private BlockCrowd2 unityScriptAnchor;
+    private LocalizationPercept locPS;
+    private Hokuyo hokuyoSensor;
+
+    protected List<Vector3RefWrap> uavPercepts = new List<Vector3RefWrap>();
+    public List<Vector3RefWrap> UAVPercepts
+    {
+        get { return uavPercepts; }
+    }
+
+    public UAVPerceptSchema(BlockCrowd2 _unityScriptAnchor, LocalizationPercept _locPS, Hokuyo _hokuyoSensor)
+    {
+        this.unityScriptAnchor = _unityScriptAnchor;
+        this.locPS = _locPS;
+        this.hokuyoSensor = _hokuyoSensor;
+    }
+
+    public void Update()
+    {
+        //so the hokuyo gives us all UAVs, and we must eliminate our own location from the percepts, and make them egocentric.
+        this.uavPercepts.Clear();
+        List<Vector3> currUAV = this.hokuyoSensor.robotsDetected();
+
+        //how do we eliminate "us"?  closest, which due to the simulated perfection going on, will happen to be "zero distance" for now.
+        int closest = -1;
+        double closestDist = double.MaxValue;
+        for(int uav=0; uav<currUAV.Count; uav++)
+        {
+            //me->UAV = me->Hokuyo + Hokuyo->UAV, vector sum
+            double dist = (locPS.HokuyoLoc.val + currUAV[uav]).magnitude;
+            if (dist < closestDist)
+            {
+                closestDist = dist;
+                closest = uav;
+            }
+        }
+        currUAV.RemoveAt(closest);
+
+        while (uavPercepts.Count < currUAV.Count)
+            uavPercepts.Add(new Vector3RefWrap(Vector3.zero));
+
+        for(int uav=0; uav<currUAV.Count; uav++)
+        {
+            //me->UAV = me->Hokuyo + Hokuyo->UAV, vector sum
+            this.uavPercepts[uav].val = locPS.HokuyoLoc.val + currUAV[uav];
+        }
+    }
+}
 
 
 //--Sensor--
 //returns vector3 position of uav relative to Hokuyo.
-public abstract class HokuyoBase
-{
-    public abstract Vector3 HokuyoSensorData();
-}
-public class UnitTestHokuyo : HokuyoBase
-{
-    public Vector3 uavLocFromSensor;
-    public override Vector3 HokuyoSensorData()
-    {
-        return uavLocFromSensor;
-    }
-}
-public class Hokuyo : HokuyoBase
+
+//this is a stub which abstracts some means of self-localization for this UAV
+//this would probablyl be an EKF with IMU and Hokuyo readings or something to stabilize onboard location sense
+//providing as "world coordinates", in the sense of being relative to Hokuyo's static location in the world
+public class LocalizationSensor
 {
     private BlockCrowd2 unityScriptAnchor;
-    public Hokuyo(BlockCrowd2 _unityScriptAnchor)
+    private Vector3 hokuyoLocation;
+    public LocalizationSensor(BlockCrowd2 _unityScriptAnchor)
     {
         unityScriptAnchor = _unityScriptAnchor;
-    }
-
-    //TODO: expand on this, from ground-truth to a simple simulation of the hokuyo planar laser ranger
-    //called by LocalizationPercept_Hokuyo
-    public override Vector3 HokuyoSensorData()
-    {
-        //note that we are returning the UAV's location *relative to the hokuyo*; this is all we get from such a sensor at best
-        Vector3 hokuyoLocation = new Vector3(
+        hokuyoLocation = new Vector3(
             GameObject.Find("/Wall_Left").transform.position.x + GameObject.Find("/Wall_Left").collider.bounds.size.x / 2,
             GameObject.Find("/Floor").transform.position.y + (float)unityScriptAnchor.HallwaySize / 2.0F,
             GameObject.Find("/BlockLine").transform.position.z);
+    }
+
+    //called by LocalizationPercept
+    public Vector3 UAVLocation()
+    {
         return unityScriptAnchor.transform.position - hokuyoLocation;
     }
 }
 //--Percept--
 //simulated Hokuyo sensor percept implementation
 //note that the hokayu is located 6 feet from the floor on the right wall, so it can tell where both walls and ceiling are relative the UAV
-public class LocalizationPercept_Hokuyo
+public class LocalizationPercept
 {
     private BlockCrowd2 unityScriptAnchor;
     //raw data from Hokuyo sensor
@@ -392,8 +521,8 @@ public class LocalizationPercept_Hokuyo
     {
         get { return floor; }
     }
-    private HokuyoBase sensor;
-    public LocalizationPercept_Hokuyo(BlockCrowd2 _unityScriptAnchor, HokuyoBase _sensor)
+    private LocalizationSensor sensor;
+    public LocalizationPercept(BlockCrowd2 _unityScriptAnchor, LocalizationSensor _sensor)
     {
         this.unityScriptAnchor = _unityScriptAnchor;
         this.sensor = _sensor;
@@ -402,7 +531,7 @@ public class LocalizationPercept_Hokuyo
     public void Update()
     {
         //if we expand upon the hokuyo, we'll need to analyze the... points... to get UAV relative to sensor...right now it is just ground truth
-        uavLoc.val = sensor.HokuyoSensorData();
+        uavLoc.val = sensor.UAVLocation();
 
 
         //from this, we know the UAV's location relative to the sensor; for egocentric coords, we need the opposite
@@ -414,7 +543,6 @@ public class LocalizationPercept_Hokuyo
         this.floor.val = hokuyoLoc.val.y - (float)unityScriptAnchor.HallwaySize / 2.0F;
     }
 }
-
 
 
 
@@ -630,8 +758,8 @@ public class Rand2D : UAVMotorSchema
         //decay reaches 1% at capDistance, but strictly never reaches zero (always applies something)
         float x = position.val.magnitude / capDistance;
         float responseScale = (float)Math.Pow(100, 0.0F - x) * (float)this.peakFieldStrength;
-        if (responseScale <= 0)
-            Debug.Log(unityScriptAnchor.DebugID + ": ***** Rand2D responseScale == 0!");
+        //if (responseScale <= 0)
+          //  Debug.Log(unityScriptAnchor.DebugID + ": ***** Rand2D responseScale == 0!");
         if (Time.time > this.changeTime)
         {
             UnityEngine.Random.seed = (int)System.DateTime.Now.Ticks;
@@ -686,26 +814,22 @@ public abstract class UAVBehavior
         this.responseTranslate = Vector3.zero;
         this.responseRotate = Vector3.zero;
 
-        //leave responseTranslate, responseRotate equal to zero if behavior is not released
-        if (innateReleaser)
+        foreach (string behKey in childBehaviors.Keys)
         {
-            foreach (string behKey in childBehaviors.Keys)
+            childBehaviors[behKey].Update();
+                
+            //leave responseTranslate, responseRotate equal to zero if behavior is not released
+            if (innateReleaser)
             {
-                //if (innateReleaser)
-                //{
-                childBehaviors[behKey].Update();
                 this.responseTranslate = this.responseTranslate + childBehaviors[behKey].ResponseTranslate;
                 this.responseRotate = this.responseRotate + childBehaviors[behKey].ResponseRotate;
-                //}
-                //else
-                //{
-                //    this.responseTranslate = Vector3.zero;
-                //    this.responseRotate = Vector3.zero;
-                //}
             }
-            foreach (string msKey in motorSchema.Keys)
+        }
+        foreach (string msKey in motorSchema.Keys)
+        {
+            this.motorSchema[msKey].Update();
+            if (innateReleaser)
             {
-                this.motorSchema[msKey].Update();
                 this.responseTranslate = this.responseTranslate + motorSchema[msKey].ResponseTranslate;
                 this.responseRotate = this.responseRotate + motorSchema[msKey].ResponseRotate;
             }
@@ -739,12 +863,12 @@ public class KeepHeight : UAVBehavior
         {
             case Wall.Ceiling:
                 fieldOrient = new Vector3(0, -1, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.Ceiling;
+                fieldMax = unityScriptAnchor.LocPercept.Ceiling;
                 msKey = "ceiling";
                 break;
             case Wall.Floor:
                 fieldOrient = new Vector3(0, 1, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.Floor;
+                fieldMax = unityScriptAnchor.LocPercept.Floor;
                 msKey = "floor";
                 break;
         }
@@ -765,7 +889,7 @@ public class KeepHeight : UAVBehavior
 
     public override void Update()
     {
-        this.heightRelative.val = unityScriptAnchor.LocPerceptHokuyo.Floor.val + height;
+        this.heightRelative.val = unityScriptAnchor.LocPercept.Floor.val + height;
 
         base.Update();
     }
@@ -783,9 +907,9 @@ public class HoldCenter : UAVBehavior
         : base(_unityScriptAnchor)
     {
         midPoint = new Vector3RefWrap(new Vector3(
-            _unityScriptAnchor.LocPerceptHokuyo.LeftWall.val - (float)_unityScriptAnchor.HallwaySize / 2.0F,
-            _unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)_unityScriptAnchor.AboveEyeLevel,
-            _unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z
+            _unityScriptAnchor.LocPercept.LeftWall.val - (float)_unityScriptAnchor.HallwaySize / 2.0F,
+            _unityScriptAnchor.LocPercept.Floor.val + (float)_unityScriptAnchor.AboveEyeLevel,
+            _unityScriptAnchor.LocPercept.HokuyoLoc.val.z
             ));
         this.motorSchema.Add("ms", new AttractiveExponentialDecrease(_unityScriptAnchor, midPoint,
                                                              (float)_unityScriptAnchor.holdPositionStrength,
@@ -795,14 +919,14 @@ public class HoldCenter : UAVBehavior
 
     public override void Update()
     {
-        midPoint.val.x = unityScriptAnchor.LocPerceptHokuyo.LeftWall.val - (float)unityScriptAnchor.HallwaySize / 2.0F;
-        midPoint.val.y = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.AboveEyeLevel;
-        midPoint.val.z = unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z;
+        midPoint.val.x = unityScriptAnchor.LocPercept.LeftWall.val - (float)unityScriptAnchor.HallwaySize / 2.0F;
+        midPoint.val.y = unityScriptAnchor.LocPercept.Floor.val + (float)unityScriptAnchor.AboveEyeLevel;
+        midPoint.val.z = unityScriptAnchor.LocPercept.HokuyoLoc.val.z;
 
         //This debug should really be based on maximum sensor ranges ( distance > max ), but used null here for Unity environment
-        if (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val == null ||
-                        unityScriptAnchor.LocPerceptHokuyo.Floor.val == null ||
-                        unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z == null)
+        if (unityScriptAnchor.LocPercept.LeftWall.val == null ||
+                        unityScriptAnchor.LocPercept.Floor.val == null ||
+                        unityScriptAnchor.LocPercept.HokuyoLoc.val.z == null)
             Debug.Log(unityScriptAnchor.DebugID + ": *****Error, leftwall, floor or Hokuyo.z not detected");
         //Enable following line to see what readings your recieving when trying to center to hall.
         //Debug.Log (unityScriptAnchor.LocPerceptHokuyo.LeftWall.val + " : " + unityScriptAnchor.LocPerceptHokuyo.Floor.val + " : " + unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z);
@@ -826,7 +950,7 @@ public class Follow : UAVBehavior
         this.crowdProjectOnPlane = new Vector3RefWrap(new Vector3(
             _unityScriptAnchor.CrowdPercept.NthCrowd(0).val.x,
             0.0F,
-            _unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z));
+            _unityScriptAnchor.LocPercept.HokuyoLoc.val.z));
         //TODO: transform the crowd projection to take eye-level height into account; then, enable Y-dimension field from this, and get rid of the KeepHeight in Follow-state.
         this.motorSchema.Add("ms", new AttractiveExponentialDecrease(_unityScriptAnchor, crowdProjectOnPlane,
                                                              (float)_unityScriptAnchor.followStrength,
@@ -838,7 +962,7 @@ public class Follow : UAVBehavior
     public override void Update()
     {
         this.crowdProjectOnPlane.val.x = unityScriptAnchor.CrowdPercept.NthCrowd(0).val.x;
-        this.crowdProjectOnPlane.val.z = unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z;
+        this.crowdProjectOnPlane.val.z = unityScriptAnchor.LocPercept.HokuyoLoc.val.z;
 
         base.Update();
     }
@@ -886,6 +1010,11 @@ public class AvoidCrowd : UAVBehavior
     }
 }
 
+//TODO: REFACTOR**
+//public class AvoidUAV : UAVBehavior
+//{
+//}
+
 //uses Rand2D to make unpredictable motions in front of a crowd, to scare them hopefully.
 //Percepts: LocPerceptHokuyo, CrowdPercept
 //Motor Schemas: Rand2D
@@ -900,8 +1029,8 @@ public class ThreateningRand2D : UAVBehavior
     {
         this.crowdProjectOnPlane = new Vector3RefWrap(new Vector3(
             _unityScriptAnchor.CrowdPercept.NthCrowd(0).val.x,
-            _unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)_unityScriptAnchor.ThreatenHeight,
-            _unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z));
+            _unityScriptAnchor.LocPercept.Floor.val + (float)_unityScriptAnchor.ThreatenHeight,
+            _unityScriptAnchor.LocPercept.HokuyoLoc.val.z));
         this.motorSchema.Add("ms", new Rand2D(_unityScriptAnchor, this.crowdProjectOnPlane,
                                                 (float)_unityScriptAnchor.randThreaten2DDepth,
                                                 (float)_unityScriptAnchor.randThreaten2DInterval,
@@ -911,8 +1040,8 @@ public class ThreateningRand2D : UAVBehavior
     public override void Update()
     {
         this.crowdProjectOnPlane.val.x = unityScriptAnchor.CrowdPercept.NthCrowd(0).val.x;
-        this.crowdProjectOnPlane.val.y = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.ThreatenHeight;
-        this.crowdProjectOnPlane.val.z = unityScriptAnchor.LocPerceptHokuyo.HokuyoLoc.val.z;
+        this.crowdProjectOnPlane.val.y = unityScriptAnchor.LocPercept.Floor.val + (float)unityScriptAnchor.ThreatenHeight;
+        this.crowdProjectOnPlane.val.z = unityScriptAnchor.LocPercept.HokuyoLoc.val.z;
         base.Update();
     }
 }
@@ -936,8 +1065,8 @@ public class Watching : UAVBehavior
     }
     //TODO: perhaps GazeStatic(forward) as well
     public override void Update()
-    {
-
+	{
+		if (!InnateReleaser && unityScriptAnchor.WatchZone) Debug.Log(unityScriptAnchor.DebugID + ": watching");
         this.InnateReleaser = unityScriptAnchor.WatchZone;
 
         //if (!childBehaviors.ContainsKey("keepheight"))
@@ -979,9 +1108,9 @@ public class Approaching : UAVBehavior
     }
     //TODO: perhaps GazeNearest(Ci)
     public override void Update()
-    {
+	{
+		if (!InnateReleaser && unityScriptAnchor.ApproachZone) Debug.Log(unityScriptAnchor.DebugID + ": approaching");
         this.InnateReleaser = unityScriptAnchor.ApproachZone;
-
         base.Update();
 
         Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
@@ -1010,7 +1139,8 @@ public class Threatening : UAVBehavior
         //TODO: perhaps GazeStatic(forward) as well
     }
     public override void Update()
-    {
+	{
+		if (!InnateReleaser && unityScriptAnchor.ThreatenZone) Debug.Log(unityScriptAnchor.DebugID + ": threatening");
         this.InnateReleaser = unityScriptAnchor.ThreatenZone;
 
         base.Update();
@@ -1068,25 +1198,25 @@ public class Avoid : UAVBehavior
         {
             case Wall.Left:
                 fieldOrient = new Vector3(-1, 0, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.LeftWall;
+                fieldMax = unityScriptAnchor.LocPercept.LeftWall;
                 fieldMin = avoidFieldMin_Left;
                 msKey = "left";
                 break;
             case Wall.Right:
                 fieldOrient = new Vector3(1, 0, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.RightWall;
+                fieldMax = unityScriptAnchor.LocPercept.RightWall;
                 fieldMin = avoidFieldMin_Right;
                 msKey = "right";
                 break;
             case Wall.Ceiling:
                 fieldOrient = new Vector3(0, -1, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.Ceiling;
+                fieldMax = unityScriptAnchor.LocPercept.Ceiling;
                 fieldMin = avoidFieldMin_Ceiling;
                 msKey = "ceiling";
                 break;
             case Wall.Floor:
                 fieldOrient = new Vector3(0, 1, 0);
-                fieldMax = unityScriptAnchor.LocPerceptHokuyo.Floor;
+                fieldMax = unityScriptAnchor.LocPercept.Floor;
                 fieldMin = avoidFieldMin_Floor;
                 msKey = "floor";
                 break;
@@ -1110,6 +1240,9 @@ public class Avoid : UAVBehavior
 
     public override void Update()
     {
+        //This is a tactical behavior so it is always released
+        this.InnateReleaser = true;
+
         //implement update, which should add AvoidCrowd instances as needed, then call base Update 
         int newNumCrowdTracks = 0;
         for (int i = 0; i < unityScriptAnchor.CrowdPercept.SensedCrowdCount; i++)
@@ -1127,10 +1260,10 @@ public class Avoid : UAVBehavior
         }
         this.currNumCrowdTracks = newNumCrowdTracks;
 
-        avoidFieldMin_Left.val = unityScriptAnchor.LocPerceptHokuyo.LeftWall.val - (float)unityScriptAnchor.wallAvoidDepth;
-        avoidFieldMin_Right.val = unityScriptAnchor.LocPerceptHokuyo.RightWall.val + (float)unityScriptAnchor.wallAvoidDepth;
-        avoidFieldMin_Ceiling.val = unityScriptAnchor.LocPerceptHokuyo.Ceiling.val - (float)unityScriptAnchor.wallAvoidDepth;
-        avoidFieldMin_Floor.val = unityScriptAnchor.LocPerceptHokuyo.Floor.val + (float)unityScriptAnchor.wallAvoidDepth;
+        avoidFieldMin_Left.val = unityScriptAnchor.LocPercept.LeftWall.val - (float)unityScriptAnchor.wallAvoidDepth;
+        avoidFieldMin_Right.val = unityScriptAnchor.LocPercept.RightWall.val + (float)unityScriptAnchor.wallAvoidDepth;
+        avoidFieldMin_Ceiling.val = unityScriptAnchor.LocPercept.Ceiling.val - (float)unityScriptAnchor.wallAvoidDepth;
+        avoidFieldMin_Floor.val = unityScriptAnchor.LocPercept.Floor.val + (float)unityScriptAnchor.wallAvoidDepth;
 
         base.Update();
 
@@ -1272,11 +1405,18 @@ public class BlockCrowd2 : MonoBehaviour
         get { return crowdPercept; }
     }
 
-    private Hokuyo hokuyo;
-    private LocalizationPercept_Hokuyo locPerceptHokuyo;
-    public LocalizationPercept_Hokuyo LocPerceptHokuyo
+    private LocalizationSensor locSens;
+    private LocalizationPercept locPercept;
+    public LocalizationPercept LocPercept
     {
-        get { return locPerceptHokuyo; }
+        get { return locPercept; }
+    }
+
+    private Hokuyo hokuyoSens;
+    private UAVPerceptSchema uavPS;
+    public UAVPerceptSchema UAVPerceptualSchema
+    {
+        get { return uavPS; }
     }
 
     private Dictionary<string, UAVBehavior> behaviors = new Dictionary<string, UAVBehavior>();
@@ -1289,10 +1429,12 @@ public class BlockCrowd2 : MonoBehaviour
     public void Start()
     {
         //these aren't changed after Start()--------
+        this.locSens = new LocalizationSensor(this);
+        this.locPercept = new LocalizationPercept(this, this.locSens);
+        this.hokuyoSens = new Hokuyo(this);
+        this.uavPS = new UAVPerceptSchema(this, this.locPercept, this.hokuyoSens);
         this.crowdSensor = new CrowdDetectionSensor(this);
-        crowdPercept = new CrowdPercept(this, this.crowdSensor);
-        this.hokuyo = new Hokuyo(this);
-        locPerceptHokuyo = new LocalizationPercept_Hokuyo(this, this.hokuyo);
+        this.crowdPercept = new CrowdPercept(this, this.crowdSensor, this.uavPS);
 
         //may want to change the find"black" gameobject to another percept for setting initial positions, suggest something from Hokuyo sensor possibly
         this.hallwaySize = Math.Abs(GameObject.Find("/Wall_Right").transform.position.x - GameObject.Find("/Wall_Left").transform.position.x) - GameObject.Find("/Wall_Left").collider.bounds.size.x;
@@ -1351,7 +1493,8 @@ public class BlockCrowd2 : MonoBehaviour
         this.velocity = (transform.position - lastPos) / Time.deltaTime;
         this.lastPos = transform.position;
 
-        this.locPerceptHokuyo.Update();
+        this.locPercept.Update();
+		this.uavPS.Update();
         this.crowdPercept.Update();
 
         //
@@ -1365,7 +1508,7 @@ public class BlockCrowd2 : MonoBehaviour
         threatenZone = false;
         if (crowdPercept.BlockableCrowdCount > 0)
         {
-            float distToFirstCrowd = Math.Abs(CrowdPercept.BlockableCrowds[0].val.z - locPerceptHokuyo.HokuyoLoc.val.z);
+            float distToFirstCrowd = Math.Abs(CrowdPercept.BlockableCrowds[0].val.z - locPercept.HokuyoLoc.val.z);
             if (distToFirstCrowd < threatenRange)
             {
                 threatenZone = true;
@@ -1379,32 +1522,6 @@ public class BlockCrowd2 : MonoBehaviour
                 watchZone = true;
             }
         }
-
-        //if (threatenZone) {
-        //    if ( !this.behaviors.ContainsKey("threaten") )
-        //    {
-        //        this.behaviors.Remove("approach");
-        //        this.behaviors.Remove("watch");
-        //        this.behaviors.Add("threaten", new Threatening(this));
-        //        Debug.Log (debugID+": threatening");
-        //    }
-        //} else if (approachZone) {
-        //    if ( !this.behaviors.ContainsKey("approach") )
-        //    {
-        //        this.behaviors.Remove("threaten");
-        //        this.behaviors.Remove("watch");
-        //        this.behaviors.Add("approach", new Approaching(this));
-        //        Debug.Log (debugID+": approaching");
-        //    }
-        //} else {
-        //    if (!this.behaviors.ContainsKey("watch"))
-        //    {
-        //        this.behaviors.Remove("approach");
-        //        this.behaviors.Remove("threaten");
-        //        this.behaviors.Add("watch", new Watching(this));
-        //        Debug.Log (debugID+": watching");
-        //    }
-        //}
 
         //
         //----------------------END INNATE RELEASERS------------------------------------------------
