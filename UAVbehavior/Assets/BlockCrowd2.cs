@@ -313,10 +313,55 @@ public class CrowdPercept
 
     public Vector3RefWrap NthCrowd(int n)
     {
-        return blockableCrowds[n];
+        if (blockableCrowdCount == 0)
+        {
+            return new Vector3RefWrap(Vector3.zero);
+        }
+        else
+        {
+            return blockableCrowds[n];
+        }
     }
 }
 
+//TODO: REFACTOR**
+//need ordered list of blockable UAV's for AvoidUAV's
+public class UAVSensor
+{
+
+    private BlockCrowd2 unityScriptAnchor;
+    //will take UAV entity (ie BlockCrowd2) by reference
+    public UAVSensor(BlockCrowd2 _unityScriptAnchor)
+    {
+        this.unityScriptAnchor = _unityScriptAnchor;
+    }
+    //returns list of egocentric vectors from UAV to other uav's
+    public List<Vector3> robotsDetected()
+    {
+        GameObject[] foundGOs = GameObject.FindGameObjectsWithTag("UAV");
+        List<GameObject> simUAVs = new List<GameObject>();
+        foreach (GameObject go in foundGOs)
+            simUAVs.Add(go);
+
+        //list of egocentric vectors (pointing to other UAV objects)
+        List<Vector3> sensedUAVs = new List<Vector3>();
+        foreach (GameObject UAV in simUAVs)
+        {
+            //distance from UAV to other uav GameObject position
+            float dist = (UAV.transform.position - unityScriptAnchor.transform.position).magnitude;
+            //TODO: add IF? 
+            //if (//UAV can see the other uav)
+            //then add the egocentric vector pointing to the crowd to sensedCrowds
+            sensedUAVs.Add(UAV.transform.position - unityScriptAnchor.transform.position);
+
+        }
+        //if (sensedCrowds.Count > 4 || sensedCrowds.Count < 0)
+        //Debug.Log("***** vector count exceeds crowd elements by: " + sensedCrowds.Count);
+        return sensedUAVs;
+    }
+}
+//TODO: REFACTOR**
+    public class UAVPercept{}
 
 
 //--Sensor--
@@ -679,34 +724,35 @@ public abstract class UAVBehavior
 
     public virtual void Update()
     {
+        //TODO: delete this
+        Debug.Log(unityScriptAnchor.DebugID + ": blockableCrowdCount: " + 
+            unityScriptAnchor.CrowdPercept.BlockableCrowdCount);
+
         //basically a coordination function, simple pfield sum across this behavior and any children:
         this.responseTranslate = Vector3.zero;
         this.responseRotate = Vector3.zero;
 
-        //leave responseTranslate, responseRotate equal to zero if behavior is not released
-        if (innateReleaser)
-        {
             foreach (string behKey in childBehaviors.Keys)
             {
-                //if (innateReleaser)
-                //{
                 childBehaviors[behKey].Update();
+                
+                //leave responseTranslate, responseRotate equal to zero if behavior is not released
+                if (innateReleaser)
+                {
                 this.responseTranslate = this.responseTranslate + childBehaviors[behKey].ResponseTranslate;
                 this.responseRotate = this.responseRotate + childBehaviors[behKey].ResponseRotate;
-                //}
-                //else
-                //{
-                //    this.responseTranslate = Vector3.zero;
-                //    this.responseRotate = Vector3.zero;
-                //}
+                }
             }
             foreach (string msKey in motorSchema.Keys)
             {
                 this.motorSchema[msKey].Update();
-                this.responseTranslate = this.responseTranslate + motorSchema[msKey].ResponseTranslate;
-                this.responseRotate = this.responseRotate + motorSchema[msKey].ResponseRotate;
+                if (innateReleaser)
+                {
+                    this.responseTranslate = this.responseTranslate + motorSchema[msKey].ResponseTranslate;
+                    this.responseRotate = this.responseRotate + motorSchema[msKey].ResponseRotate;
+                }
             }
-        }
+        
     }
 }
 
@@ -883,6 +929,11 @@ public class AvoidCrowd : UAVBehavior
     }
 }
 
+//TODO: REFACTOR**
+//public class AvoidUAV : UAVBehavior
+//{
+//}
+
 //uses Rand2D to make unpredictable motions in front of a crowd, to scare them hopefully.
 //Percepts: LocPerceptHokuyo, CrowdPercept
 //Motor Schemas: Rand2D
@@ -936,6 +987,7 @@ public class Watching : UAVBehavior
     {
 
         this.InnateReleaser = unityScriptAnchor.WatchZone;
+        if (InnateReleaser) Debug.Log(unityScriptAnchor.DebugID + ": watching");
 
         //if (!childBehaviors.ContainsKey("keepheight"))
         //{
@@ -978,7 +1030,7 @@ public class Approaching : UAVBehavior
     public override void Update()
     {
         this.InnateReleaser = unityScriptAnchor.ApproachZone;
-
+        if (InnateReleaser) Debug.Log(unityScriptAnchor.DebugID + ": approaching");
         base.Update();
 
         Debug.DrawLine(this.unityScriptAnchor.transform.position + Watching.keepheightDbgLineOffset,
@@ -1009,6 +1061,7 @@ public class Threatening : UAVBehavior
     public override void Update()
     {
         this.InnateReleaser = unityScriptAnchor.ThreatenZone;
+        if (InnateReleaser) Debug.Log(unityScriptAnchor.DebugID + ": threatening");
 
         base.Update();
 
@@ -1107,6 +1160,9 @@ public class Avoid : UAVBehavior
 
     public override void Update()
     {
+        //This is a tactical behavior so it is always released
+        this.InnateReleaser = true;
+
         //implement update, which should add AvoidCrowd instances as needed, then call base Update 
         int newNumCrowdTracks = 0;
         for (int i = 0; i < unityScriptAnchor.CrowdPercept.SensedCrowdCount; i++)
@@ -1298,9 +1354,6 @@ public class BlockCrowd2 : MonoBehaviour
         this.crowdAvoidDeadZone = ((CapsuleCollider)GameObject.Find("/Black").collider).radius;
         this.threatenHeight = GameObject.Find("/Black").collider.bounds.size.y - 0.5F;
         //--------------------------------------------
-
-        //start with Avoid() because it's tactical
-        this.behaviors.Add("avoid", new Avoid(this));
 
         //behaviors always exist in 'behaviors' list but are turned on by releasers
         //(ie their motor response is added to response.translate)
