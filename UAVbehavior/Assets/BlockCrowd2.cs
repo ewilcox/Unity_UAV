@@ -316,6 +316,7 @@ public class CrowdPercept
             {
                 int sortZ = 0 - (int)(crowd.z * 1000.0F);
 				int sortFixTries = 100;
+
 				//well, we can have these be "equal", by nature of a float's accuracy... still need them in the list, ordered arbitrarily
 				do {
 					try
@@ -425,6 +426,11 @@ public class UAVPerceptSchema
     private BlockCrowd2 unityScriptAnchor;
     private LocalizationPercept locPS;
     private Hokuyo hokuyoSensor;
+    private int neighborUAVcount;
+    public int NeighborUAVcount
+    {
+        get { return neighborUAVcount; }
+    }
 
     protected List<Vector3RefWrap> uavPercepts = new List<Vector3RefWrap>();
     public List<Vector3RefWrap> UAVPercepts
@@ -437,15 +443,21 @@ public class UAVPerceptSchema
         this.unityScriptAnchor = _unityScriptAnchor;
         this.locPS = _locPS;
         this.hokuyoSensor = _hokuyoSensor;
+        //robotsDetected by hokuyo returns all the uav's.  to get number of
+        //neighbors, subtract 1
     }
 
     public void Update()
     {
-        //so the hokuyo gives us all UAVs, and we must eliminate our own location from the percepts, and make them egocentric.
+
+        this.neighborUAVcount = this.hokuyoSensor.robotsDetected().Count - 1;
+        //so the hokuyo gives us all UAVs, and we must eliminate our own location from the 
+        //percepts, and make them egocentric.
         this.uavPercepts.Clear();
         List<Vector3> currUAV = this.hokuyoSensor.robotsDetected();
 
-        //how do we eliminate "us"?  closest, which due to the simulated perfection going on, will happen to be "zero distance" for now.
+        //how do we eliminate "us"?  closest, which due to the simulated perfection going on, 
+        //will happen to be "zero distance" for now.
         int closest = -1;
         double closestDist = double.MaxValue;
         for(int uav=0; uav<currUAV.Count; uav++)
@@ -1023,9 +1035,40 @@ public class AvoidCrowd : UAVBehavior
 }
 
 //TODO: REFACTOR**
-//public class AvoidUAV : UAVBehavior
-//{
-//}
+//AvoidUAV just avoids one target uav.  the Avoid parent behavior uses one AvoidUAV for each neighbor UAV
+public class AvoidUAV : UAVBehavior
+{
+    private Vector3RefWrap neighborUAVLocation; //location of UAV to avoid (just x, y)
+
+    private int nthNeighbor; //which UAV in UAVPercepts to avoid
+
+    public AvoidUAV(BlockCrowd2 _unityScriptAnchor, int _nthNeighbor)
+        : base(_unityScriptAnchor)
+    {
+        this.nthNeighbor = _nthNeighbor;
+
+        neighborUAVLocation = new Vector3RefWrap(new Vector3(
+            unityScriptAnchor.UAVPerceptualSchema.UAVPercepts[nthNeighbor].val.x,
+            unityScriptAnchor.UAVPerceptualSchema.UAVPercepts[nthNeighbor].val.y,
+            0));
+
+        this.motorSchema.Add("ms", new RepulsiveExponentialIncrease(unityScriptAnchor,
+                                                            neighborUAVLocation,
+                                                            (float)unityScriptAnchor.neighborUAVAvoidStrength,
+                                                            (float)unityScriptAnchor.neighborUAVAvoidDepth,
+                                                            true, true, false,
+                                                            (float)unityScriptAnchor.neighborUAVAvoidDeadZone));
+    }
+
+    public override void Update()
+    {
+        this.neighborUAVLocation.val.x = unityScriptAnchor.UAVPerceptualSchema.UAVPercepts[this.nthNeighbor].val.x;
+        this.neighborUAVLocation.val.y = unityScriptAnchor.UAVPerceptualSchema.UAVPercepts[this.nthNeighbor].val.y;
+
+        base.Update();
+    }
+
+}
 
 //uses Rand2D to make unpredictable motions in front of a crowd, to scare them hopefully.
 //Percepts: LocPerceptHokuyo, CrowdPercept
@@ -1192,6 +1235,7 @@ public enum Wall
 public class Avoid : UAVBehavior
 {
     protected int currNumCrowdTracks = 0;
+    protected int currNumNeighborTracks = 0;
 
     //wall avoid motor schema need one moving value not provided by a percept: the position, wallAvoidDepth from each surface, 
     //at which the exponential of the pfield strength reaches 1% (the "min").  These maintain that input to the motor schema.
@@ -1252,10 +1296,28 @@ public class Avoid : UAVBehavior
 
     public override void Update()
     {
-        //This is a tactical behavior so it is always released
         this.InnateReleaser = true;
 
-        //implement update, which should add AvoidCrowd instances as needed, then call base Update 
+        //implement update, which should add AvoidCrowd and AvoidUAV instances as needed, then call base Update
+
+        int newNumNeighborTracks = 0;
+        for (int i = 0; i < unityScriptAnchor.UAVPerceptualSchema.NeighborUAVcount; i++)
+        {
+            newNumNeighborTracks++;
+            if (newNumNeighborTracks > this.currNumNeighborTracks)
+            {
+                childBehaviors.Add("avoiduav" + i, 
+                    new AvoidUAV(this.unityScriptAnchor, i));
+            }
+        }
+        while (newNumNeighborTracks < this.currNumNeighborTracks)
+		{
+			this.currNumNeighborTracks--;
+            childBehaviors.Remove("avoiduav" + this.currNumNeighborTracks);
+        }
+        this.currNumNeighborTracks = newNumNeighborTracks;
+        
+
         int newNumCrowdTracks = 0;
         for (int i = 0; i < unityScriptAnchor.CrowdPercept.SensedCrowdCount; i++)
         {
@@ -1362,6 +1424,13 @@ public class BlockCrowd2 : MonoBehaviour
         get { return this.crowdAvoidDeadZone; }
     }
     public double crowdAvoidDepth = 0.4;
+    public double neighborUAVAvoidStrength = 1.0;
+    public double neighborUAVAvoidDeadZone = 0.5;
+    //public double NeighborUAVAvoidDeadZone{
+    //    get { return this.neighborUAVAvoidDeadZone; }
+    //}
+    //TODO: is this depth value about right?
+    public double neighborUAVAvoidDepth = 0.4;
     public double keepHeightStrength = 0.4;
     public double holdPositionStrength = 0.25;
     public double followStrength = 0.4;
