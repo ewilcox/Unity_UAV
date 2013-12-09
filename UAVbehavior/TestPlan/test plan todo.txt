@@ -1,6 +1,0 @@
-testunityscripts, UAVUnitTest
-currently unit-tests the motor schema with several data points; requires separate instructions to document how to run it & what should be reported
-probably not viable to go all the way up the hierarchy but could go further
-
-note that these data points are gathered by putting debug.log statements in, 
-and single-stepping simulation at key points while arranging scene for data to be as desired for the sample

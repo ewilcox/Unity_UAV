@@ -1443,9 +1443,11 @@ public class BlockCrowd2 : MonoBehaviour
     public double randThreaten2DStrength = 0.1;
     public double randThreaten2DDepth = 1.0;
     public double randThreaten2DInterval = 0.2;
+	public double velocityScale = 0.04;	// % increase to velocity preventing large jumps in speed
 
     private Vector3 lastPos;
     public Vector3 velocity;
+	private Vector3 oldVelocity;
 
     //Innate Releaser states
     private bool approachZone = false;
@@ -1578,8 +1580,18 @@ public class BlockCrowd2 : MonoBehaviour
     {
         //this line makes the rotors spin realistically... it's cosmetic
         animation.CrossFade("Spin");
-        this.velocity = (transform.position - lastPos) / Time.deltaTime;
-        this.lastPos = transform.position;
+        
+	    this.velocity = (transform.position - lastPos) / Time.deltaTime;
+
+		if (Math.Abs(this.velocity.x - this.oldVelocity.x) > (float)velocityScale)
+		{
+			this.velocity.x = this.velocity.x * (float)velocityScale;
+		}
+		this.oldVelocity = this.velocity;
+
+		//Debug.Log (this.velocity.x);
+
+		this.lastPos = transform.position;
 
         this.locPercept.Update();
 		this.uavPS.Update();
