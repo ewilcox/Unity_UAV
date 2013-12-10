@@ -1035,7 +1035,6 @@ public class AvoidCrowd : UAVBehavior
     }
 }
 
-//TODO: REFACTOR**
 //AvoidUAV just avoids one target uav.  the Avoid parent behavior uses one AvoidUAV for each neighbor UAV
 public class AvoidUAV : UAVBehavior
 {
@@ -1105,7 +1104,7 @@ public class ThreateningRand2D : UAVBehavior
 
 
 //---Parent Behaviors
-//released depending on distance of closest crowd.  Released == added to list of childBehaviors
+//released depending on distance of closest crowd.  Released == added to list of behaviors
 
 //Uses: KeepHeight and HoldCenter
 //Released by: watchZone

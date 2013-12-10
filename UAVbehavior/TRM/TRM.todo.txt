@@ -26,3 +26,6 @@ UAV spawn settings (default is 3, but can do whatever "n")
 -uav count specified here
 	-uavs spawn randomly along 'block line'
 
+
+--update avoid
+--give credit to zhou wang
